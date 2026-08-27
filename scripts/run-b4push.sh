@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Pre-push check suite for zudo-ez-host. Mirrors .github/workflows/ci.yml so
-# failures surface locally instead of on the runner — keep the two in sync.
+# Pre-push check suite for zudo-ez-host. The first five steps mirror
+# .github/workflows/ci.yml so failures surface locally instead of on the
+# runner; the final two steps validate the generated documentation site.
 #
 # Failures are collected rather than exited on, so one run reports every broken
 # step instead of costing a round-trip per fix.
@@ -31,11 +32,13 @@ run_step() {
   fi
 }
 
-run_step "Step 1/5: Install dependencies (frozen lockfile)" pnpm install --frozen-lockfile
-run_step "Step 2/5: Format check"                           pnpm format:check
-run_step "Step 3/5: Lint"                                   pnpm lint
-run_step "Step 4/5: Typecheck"                              pnpm typecheck
-run_step "Step 5/5: Build"                                  pnpm build
+run_step "Step 1/7: Install dependencies (frozen lockfile)" pnpm install --frozen-lockfile
+run_step "Step 2/7: Format check"                           pnpm format:check
+run_step "Step 3/7: Lint"                                   pnpm lint
+run_step "Step 4/7: Typecheck"                              pnpm typecheck
+run_step "Step 5/7: Build"                                  pnpm build
+run_step "Step 6/7: Documentation i18n parity"              pnpm check:doc:i18n
+run_step "Step 7/7: Documentation internal links"           pnpm check:doc:links
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))

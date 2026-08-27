@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "wrangler types src/worker-configuration.d.ts --env-interface ControlEnv --include-runtime false --check && wrangler deploy --dry-run --config wrangler.toml",
-    "build:test-auxiliary": "wrangler deploy src/publication-resolver.ts --dry-run --config wrangler.toml --outdir .vitest/control",
+    "build:test-auxiliary": "wrangler deploy src/test-auxiliary.ts --dry-run --config wrangler.toml --outdir .vitest/control",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit"

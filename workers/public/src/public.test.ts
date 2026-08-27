@@ -2,14 +2,21 @@ import {
   MANIFEST_SCHEMA_VERSION,
   SERVING_SEMANTICS_VERSION,
   encodeCanonical,
+  generateMachineToken,
+  hashMachineToken,
+  MACHINE_TOKEN_PREFIX,
+  MACHINE_TOKEN_VERSION,
   type Manifest,
   type ManifestEntry,
   type PublicationResolution,
 } from "@zudo-ez-host/core";
 import { env, exports } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { applyD1Migrations, reset } from "cloudflare:test";
+import { describe, expect, inject, it, vi, beforeEach } from "vitest";
 
 import { artifactManifestKey, contentKey } from "../../control/src/storage/keys.js";
+import { createControlDatabase } from "../../control/src/db/database.js";
+import { seedMachine, seedUser } from "../../control/src/db/seeds.js";
 import {
   createReadOnlyR2Facade,
   type ReadOnlyR2Bucket,
@@ -30,6 +37,21 @@ const ARTIFACT_HASH = "artifact-public-fixture";
 const ROOT_SHA = "a".repeat(64);
 const DIRECTORY_SHA = "b".repeat(64);
 const NOT_FOUND_SHA = "c".repeat(64);
+const REPUBLISH_SHA = "d".repeat(64);
+const STALE_SHA = "e".repeat(64);
+const WINNER_SHA = "f".repeat(64);
+const MD5_EMPTY = "1B2M2Y8AsgTpgAmY7PhCfg==";
+const E2E_OWNER_ID = "usr_public_e2e";
+const E2E_OWNER_HANDLE = "e2eowner";
+const E2E_MACHINE_ID = "mch_public_e2e";
+const E2E_MACHINE_NAME = "E2E Mac";
+
+type PublicTestEnv = PublicEnv & {
+  readonly DB: D1Database;
+  readonly CONTROL_HTTP: Fetcher;
+};
+
+const testEnv = env as PublicTestEnv;
 
 class MemoryCache {
   readonly values = new Map<string, Response>();
@@ -76,6 +98,147 @@ function publicRequest(path: string, init?: RequestInit): Request {
   return new Request(`https://${PUBLIC_LABEL}.${PUBLIC_BASE_DOMAIN}${path}`, init);
 }
 
+function publicRequestFor(label: string, path: string, init?: RequestInit): Request {
+  return new Request(`https://${label}.${PUBLIC_BASE_DOMAIN}${path}`, init);
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function e2eManifest(entries: readonly ManifestEntry[]): string {
+  const bytes = encodeCanonical(manifest(entries));
+  return JSON.stringify({
+    manifestBase64: base64(bytes),
+    transport: entries.map((entry) => ({
+      contentHash: entry.sha256,
+      contentType: entry.contentType,
+      contentMd5: MD5_EMPTY,
+    })),
+  });
+}
+
+async function controlRequest(
+  token: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  return testEnv.CONTROL_HTTP.fetch(
+    new Request(`https://control.test${path}`, { ...init, headers }),
+  );
+}
+
+async function seedE2eMachine(): Promise<string> {
+  const now = Date.now();
+  const token = generateMachineToken();
+  const database = createControlDatabase(testEnv.DB);
+  const user = await seedUser(database, {
+    id: E2E_OWNER_ID,
+    canonicalHandle: E2E_OWNER_HANDLE,
+    createdAt: now,
+  });
+  await seedMachine(database, {
+    id: E2E_MACHINE_ID,
+    userId: user.id,
+    name: E2E_MACHINE_NAME,
+    credentialHashSha256: await hashMachineToken(token),
+    credentialPrefix: MACHINE_TOKEN_PREFIX,
+    credentialVersion: MACHINE_TOKEN_VERSION,
+    createdAt: now,
+    expiresAt: now + 365 * 24 * 60 * 60 * 1_000,
+  });
+  return token;
+}
+
+async function prepareE2ePublication(
+  token: string,
+  projectId: string,
+  entries: readonly ManifestEntry[],
+): Promise<{
+  readonly attempt: { readonly id: string };
+  readonly contracts: readonly {
+    readonly contentHash: string;
+    readonly key: string;
+    readonly sizeBytes: number;
+    readonly uploadUrl: string;
+  }[];
+}> {
+  const body = e2eManifest(entries);
+  const response = await controlRequest(token, `/api/projects/${projectId}/publish/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+  expect(response.status).toBe(201);
+  const result = (await response.json()) as {
+    attempt: { id: string };
+    contracts: {
+      contracts: readonly {
+        contentHash: string;
+        key: string;
+        sizeBytes: number;
+        uploadUrl: string;
+      }[];
+    };
+  };
+  return { attempt: result.attempt, contracts: result.contracts.contracts };
+}
+
+async function uploadAndVerifyE2e(
+  token: string,
+  projectId: string,
+  prepared: Awaited<ReturnType<typeof prepareE2ePublication>>,
+  contents: Readonly<Record<string, string>>,
+): Promise<void> {
+  for (const contract of prepared.contracts) {
+    const content = contents[contract.contentHash];
+    if (content === undefined) {
+      throw new Error(`Missing test content for ${contract.contentHash}`);
+    }
+    await testEnv.ARTIFACTS.put(contract.key, content);
+    expect(contract.uploadUrl).toMatch(/^https:\/\/upload\.test\//);
+  }
+
+  const response = await controlRequest(
+    token,
+    `/api/projects/${projectId}/publish/${prepared.attempt.id}/verify`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        objects: prepared.contracts.map((contract) => ({
+          contentHash: contract.contentHash,
+          expectedSize: contract.sizeBytes,
+        })),
+      }),
+    },
+  );
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toMatchObject({
+    ok: true,
+    verifiedCount: prepared.contracts.length,
+    rejectedCount: 0,
+  });
+}
+
+async function commitE2ePublication(
+  token: string,
+  projectId: string,
+  attemptId: string,
+): Promise<Response> {
+  return controlRequest(token, `/api/projects/${projectId}/publish/commit`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ attemptId }),
+  });
+}
+
 function fixtureResolution(): Exclude<PublicationResolution, null> {
   return {
     projectId: PROJECT_ID,
@@ -108,20 +271,6 @@ describe("public Worker", () => {
     const object = await env.ARTIFACTS.get("public-binding-probe");
 
     await expect(object?.text()).resolves.toBe("r2-ok");
-  });
-
-  it("calls the named control entrypoint over a real service binding", async () => {
-    const response = await exports.default.fetch(
-      "https://public.test/resolution/project-rpc-smoke",
-    );
-    const resolution = (await response.json()) as PublicationResolution;
-
-    expect(response.status).toBe(200);
-    expect(resolution).toEqual({
-      projectId: "project-rpc-smoke",
-      artifactHash: "sha256:publication-resolution-fixture",
-      servingFlags: { spaFallback: true, gated: false },
-    });
   });
 
   it("serves an authorized root index with policy headers and a streamed body", async () => {
@@ -346,5 +495,172 @@ describe("public Worker", () => {
     expect(key.url).toContain(encodeURIComponent(ARTIFACT_HASH));
     expect(key.url).toContain("dir/index.html");
     expect(key.url).not.toContain(PUBLIC_LABEL);
+  });
+});
+
+describe("public Worker publication topology", () => {
+  beforeEach(async () => {
+    await reset();
+    await applyD1Migrations(testEnv.DB, inject("controlMigrations"), "control_d1_migrations");
+  });
+
+  it("publishes, reuses, rejects stale commits, and serves through the real resolver", async () => {
+    const token = await seedE2eMachine();
+    const registration = await controlRequest(token, "/projects", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: "site", displayName: "E2E site" }),
+    });
+    expect(registration.status).toBe(201);
+    const registered = (await registration.json()) as {
+      project: { id: string; status: string };
+      hostname: string;
+    };
+    const projectId = registered.project.id;
+    const publicLabel = registered.hostname;
+    expect(registered.project.status).toBe("active");
+    expect(publicLabel).toBe(`site--${E2E_OWNER_HANDLE}`);
+
+    const firstEntry = {
+      path: "index.html",
+      sha256: ROOT_SHA,
+      size: 7,
+      contentType: "text/html",
+    } satisfies ManifestEntry;
+    const firstEntries = [
+      firstEntry,
+      { path: "assets/app.js", sha256: DIRECTORY_SHA, size: 6, contentType: "text/javascript" },
+    ] satisfies readonly ManifestEntry[];
+    const first = await prepareE2ePublication(token, projectId, firstEntries);
+    expect(first.contracts.map((contract) => contract.contentHash)).toEqual([
+      ROOT_SHA,
+      DIRECTORY_SHA,
+    ]);
+    await uploadAndVerifyE2e(token, projectId, first, {
+      [ROOT_SHA]: "home-v1",
+      [DIRECTORY_SHA]: "app-v1",
+    });
+
+    const firstCommitResponse = await commitE2ePublication(token, projectId, first.attempt.id);
+    expect(firstCommitResponse.status).toBe(200);
+    const firstCommit = (await firstCommitResponse.json()) as {
+      publication: {
+        generation: number;
+        artifactHash: string;
+        logicalBytes: number;
+        physicalBytes: number;
+      };
+      committed: boolean;
+    };
+    expect(firstCommit).toMatchObject({
+      committed: true,
+      publication: { generation: 1, logicalBytes: 13, physicalBytes: 13 },
+    });
+
+    const firstCounters = await testEnv.DB.prepare(
+      `SELECT active_logical_bytes AS activeLogicalBytes,
+              reserved_active_delta_bytes AS reservedActiveDeltaBytes,
+              retained_staged_physical_bytes AS retainedStagedPhysicalBytes,
+              reserved_physical_upload_bytes AS reservedPhysicalUploadBytes
+       FROM user WHERE id = ?`,
+    )
+      .bind(E2E_OWNER_ID)
+      .first<{
+        activeLogicalBytes: number;
+        reservedActiveDeltaBytes: number;
+        retainedStagedPhysicalBytes: number;
+        reservedPhysicalUploadBytes: number;
+      }>();
+    expect(firstCounters).toEqual({
+      activeLogicalBytes: 13,
+      reservedActiveDeltaBytes: 0,
+      retainedStagedPhysicalBytes: 13,
+      reservedPhysicalUploadBytes: 0,
+    });
+
+    const firstServed = await exports.default.fetch(publicRequestFor(publicLabel, "/"));
+    expect(firstServed.status).toBe(200);
+    await expect(firstServed.text()).resolves.toBe("home-v1");
+    expect(firstServed.headers.get("Content-Type")).toBe("text/html");
+
+    const rpcResolution = await (
+      testEnv.CONTROL as unknown as PublicationResolverBinding
+    ).resolvePublication(publicLabel);
+    expect(rpcResolution).toMatchObject({
+      projectId,
+      artifactHash: firstCommit.publication.artifactHash,
+      servingFlags: { spaFallback: false, gated: false },
+    });
+
+    const secondEntries = [
+      firstEntry,
+      { path: "about.html", sha256: REPUBLISH_SHA, size: 8, contentType: "text/html" },
+    ] satisfies readonly ManifestEntry[];
+    const second = await prepareE2ePublication(token, projectId, secondEntries);
+    expect(second.contracts.map((contract) => contract.contentHash)).toEqual([REPUBLISH_SHA]);
+    await uploadAndVerifyE2e(token, projectId, second, { [REPUBLISH_SHA]: "about-v2" });
+
+    const secondCommitResponse = await commitE2ePublication(token, projectId, second.attempt.id);
+    expect(secondCommitResponse.status).toBe(200);
+    await expect(secondCommitResponse.json()).resolves.toMatchObject({
+      committed: true,
+      publication: { generation: 2, logicalBytes: 15, physicalBytes: 15 },
+    });
+    const republished = await exports.default.fetch(publicRequestFor(publicLabel, "/about.html"));
+    expect(republished.status).toBe(200);
+    await expect(republished.text()).resolves.toBe("about-v2");
+
+    const secondCounters = await testEnv.DB.prepare(
+      `SELECT active_logical_bytes AS activeLogicalBytes,
+              reserved_active_delta_bytes AS reservedActiveDeltaBytes,
+              retained_staged_physical_bytes AS retainedStagedPhysicalBytes,
+              reserved_physical_upload_bytes AS reservedPhysicalUploadBytes
+       FROM user WHERE id = ?`,
+    )
+      .bind(E2E_OWNER_ID)
+      .first<{
+        activeLogicalBytes: number;
+        reservedActiveDeltaBytes: number;
+        retainedStagedPhysicalBytes: number;
+        reservedPhysicalUploadBytes: number;
+      }>();
+    expect(secondCounters).toEqual({
+      activeLogicalBytes: 15,
+      reservedActiveDeltaBytes: 0,
+      retainedStagedPhysicalBytes: 21,
+      reservedPhysicalUploadBytes: 0,
+    });
+
+    const stale = await prepareE2ePublication(token, projectId, [
+      firstEntry,
+      { path: "stale.html", sha256: STALE_SHA, size: 8, contentType: "text/html" },
+    ]);
+    const winner = await prepareE2ePublication(token, projectId, [
+      firstEntry,
+      { path: "winner.html", sha256: WINNER_SHA, size: 9, contentType: "text/html" },
+    ]);
+    await uploadAndVerifyE2e(token, projectId, winner, { [WINNER_SHA]: "winner-v3" });
+    const winnerCommitResponse = await commitE2ePublication(token, projectId, winner.attempt.id);
+    expect(winnerCommitResponse.status).toBe(200);
+    await expect(winnerCommitResponse.json()).resolves.toMatchObject({
+      committed: true,
+      publication: { generation: 3, machineName: E2E_MACHINE_NAME },
+    });
+
+    const staleCommitResponse = await commitE2ePublication(token, projectId, stale.attempt.id);
+    expect(staleCommitResponse.status).toBe(409);
+    await expect(staleCommitResponse.json()).resolves.toEqual({
+      error: "publication_commit_failed",
+      reason: "publication_head_changed",
+      generation: 3,
+      machineName: E2E_MACHINE_NAME,
+    });
+
+    await testEnv.DB.prepare("UPDATE projects SET status = 'taken_down' WHERE id = ?")
+      .bind(projectId)
+      .run();
+    const takenDown = await exports.default.fetch(publicRequestFor(publicLabel, "/"));
+    expect(takenDown.status).toBe(404);
+    await expect(takenDown.text()).resolves.toBe("Not found");
   });
 });

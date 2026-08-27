@@ -122,8 +122,10 @@ Locked facts:
   required. A short commit lease may exist; no upload-length lease or silent
   last-writer-wins is allowed.
 - Reproduce every V1 quota in the ADR and distinguish exact D1 quota/attempt
-  accounting from eventually consistent abuse damping. V1 has no multipart.
-  Presigned PUT transport verification does not prove SHA-256-to-bytes.
+  accounting from eventually consistent abuse damping. Include the initial 5
+  prepares/account/minute, 10 commits/project/minute, and 1,000 presigned-URL
+  issuances/account/minute ceilings. V1 has no multipart. Presigned PUT
+  transport verification does not prove SHA-256-to-bytes.
 - Tauri v2 is an accessory/menu-bar app with a Rust `notify`-driven engine,
   hidden-by-default accessible status/setup window, explicit Quit, and opt-in
   launch-at-login.
@@ -133,8 +135,9 @@ Locked facts:
   project.
 - Browser auth uses state, PKCE, a 60-second single-use code, exact ephemeral
   loopback redirect, and TLS exchange. The one-year-maximum machine-scoped
-  bearer is prefix/versioned, hash-stored, revocable, publish-limited, and kept
-  raw only in Keychain.
+  bearer is `zeh_machine_v1_` plus 32 random bytes in unpadded base64url. Hash
+  the complete token with SHA-256 server-side; it is revocable, publish-limited,
+  and kept raw only in Keychain.
 - Root selection uses a bookmark/access-guard abstraction. Separate direct and
   App Store signing/updating/sandbox paths; do not claim App Store support until
   security-scoped access works in a signed sandbox build.

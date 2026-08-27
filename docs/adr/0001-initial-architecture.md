@@ -266,7 +266,9 @@ integrity, attempt ownership, and completeness before promotion. Presigning
 does not prove that a SHA-256 label matches bytes, so server-side SHA-256
 recomputation is explicitly deferred. V1 needs no multipart because the file
 limit is 100 MiB. Exact quota reservation and attempt limits live in D1;
-eventually consistent rate limiting is abuse damping only.
+eventually consistent rate limiting is abuse damping only. Initial configurable
+ceilings are 5 prepares/account/minute, 10 commits/project/minute, and 1,000
+presigned-URL issuances/account/minute; they are not billing or quota counters.
 
 **Rationale:** full manifests recover from lost watcher events and make the
 entire published state explicit, while immutable hash reuse minimizes transfer.
@@ -292,9 +294,12 @@ authorization code through an ephemeral loopback callback. The code expires in
 scope, and machine record. The app validates state and exchanges code plus
 verifier over TLS. No session or long-lived bearer appears in the callback URL.
 
-The issued machine credential is random, mint-once, prefix/versioned for this
-product, hash-stored server-side, revocable, machine-scoped, limited to project
-and publish operations, and has a one-year maximum lifetime. The raw value is
+The issued machine credential has the exact V1 wire shape
+`zeh_machine_v1_<random>`, where `<random>` is 32 cryptographically random bytes
+encoded as unpadded base64url. It is mint-once, hash-stored server-side by the
+SHA-256 of the complete token, revocable, machine-scoped, limited to project and
+publish operations, and has a one-year maximum lifetime. Store the non-secret
+prefix/version separately for classification and migration. The raw value is
 shown once and stored only in macOS Keychain. It cannot manage tokens or perform
 account-destructive actions. The webapp lists and revokes machines; sign-out can
 revoke the current one.

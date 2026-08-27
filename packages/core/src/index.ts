@@ -13,3 +13,9 @@ export {
   MAX_RETAINED_AND_STAGED_BYTES_PER_ACCOUNT,
   MAX_UPLOAD_CONCURRENCY_PER_MACHINE,
 } from "./limits.js";
+export {
+  PORTABLE_PATH_COLLISION_ALGORITHM_VERSION,
+  canonicalizePath,
+  findPortablePathCollisionV1,
+} from "./paths/index.js";
+export type { CanonicalPath, PathRejectionReason, PortablePathCollision } from "./paths/index.js";

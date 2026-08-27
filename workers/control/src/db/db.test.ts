@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { beforeEach, describe, expect, inject, it } from "vitest";
 
+import { authSchema } from "./auth-schema.js";
 import { createControlDatabase } from "./database.js";
 import { executeGuardedBatch } from "./guarded-batch.js";
 import type { GuardedBatchError } from "./guarded-batch.js";
@@ -17,6 +18,7 @@ import {
   getVerifiedObject,
 } from "./queries.js";
 import {
+  accounts,
   hostnameAllocations,
   machines,
   projectHeads,
@@ -25,7 +27,10 @@ import {
   publicationAttempts,
   publicationObjects,
   publications,
+  rateLimits,
+  sessions,
   users,
+  verifications,
   verifiedObjects,
 } from "./schema.js";
 import { seedMachine, seedProject, seedUser } from "./seeds.js";
@@ -75,6 +80,139 @@ describe("control D1 schema", () => {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'publication_attempts'",
     ).first<{ name: string }>();
     expect(table?.name).toBe("publication_attempts");
+  });
+
+  it("exposes the exact Better Auth model keys and applies every auth table and index", async () => {
+    expect(authSchema).toEqual({
+      user: users,
+      session: sessions,
+      account: accounts,
+      verification: verifications,
+      rateLimit: rateLimits,
+    });
+
+    const tables = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('user', 'session', 'account', 'verification', 'rateLimit') ORDER BY name",
+    ).all<{ name: string }>();
+    expect(tables.results.map(({ name }) => name)).toEqual([
+      "account",
+      "rateLimit",
+      "session",
+      "user",
+      "verification",
+    ]);
+
+    const indexes = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('session_token_unique', 'session_userId_idx', 'account_issuer_accountId_uidx', 'account_userId_idx', 'user_email_unique', 'verification_identifier_idx', 'rateLimit_key_unique') ORDER BY name",
+    ).all<{ name: string }>();
+    expect(indexes.results.map(({ name }) => name)).toEqual([
+      "account_issuer_accountId_uidx",
+      "account_userId_idx",
+      "rateLimit_key_unique",
+      "session_token_unique",
+      "session_userId_idx",
+      "user_email_unique",
+      "verification_identifier_idx",
+    ]);
+  });
+
+  it("round-trips Better Auth rows with Date timestamps and an unclaimed handle", async () => {
+    const database = createControlDatabase(env.DB);
+    const createdAt = new Date(NOW);
+    const updatedAt = new Date(NOW + 1);
+    await database.insert(users).values({
+      id: "usr_auth",
+      canonicalHandle: null,
+      name: "Auth User",
+      email: "auth@example.test",
+      emailVerified: false,
+      createdAt,
+      updatedAt,
+    });
+    await database.insert(sessions).values({
+      id: "ses_auth",
+      expiresAt: new Date(NOW + 60_000),
+      token: "session-token",
+      createdAt,
+      updatedAt,
+      userId: "usr_auth",
+    });
+    await database.insert(accounts).values({
+      id: "acc_auth",
+      issuer: "local:credential",
+      accountId: "usr_auth",
+      providerId: "credential",
+      userId: "usr_auth",
+      password: "password-hash",
+      createdAt,
+      updatedAt,
+    });
+    await database.insert(verifications).values({
+      id: "ver_auth",
+      identifier: "auth@example.test",
+      value: "verification-value",
+      expiresAt: new Date(NOW + 60_000),
+      createdAt,
+      updatedAt,
+    });
+
+    const user = await database.select().from(users).get();
+    const rawUser = await env.DB.prepare("SELECT created_at AS createdAt FROM user WHERE id = ?")
+      .bind("usr_auth")
+      .first<{ createdAt: number }>();
+    expect(user?.canonicalHandle).toBeNull();
+    expect(user?.createdAt).toBeInstanceOf(Date);
+    expect(user?.createdAt.getTime()).toBe(NOW);
+    expect(rawUser?.createdAt).toBe(NOW);
+    expect((await database.select().from(sessions).get())?.expiresAt).toBeInstanceOf(Date);
+    expect((await database.select().from(accounts).get())?.issuer).toBe("local:credential");
+    expect((await database.select().from(verifications).get())?.expiresAt).toBeInstanceOf(Date);
+
+    await expect(
+      database.insert(accounts).values({
+        id: "acc_duplicate_identity",
+        issuer: "local:credential",
+        accountId: "usr_auth",
+        providerId: "other-credential-config",
+        userId: "usr_auth",
+        createdAt,
+        updatedAt,
+      }),
+    ).rejects.toThrow();
+
+    await env.DB.prepare("DELETE FROM user WHERE id = ?").bind("usr_auth").run();
+    expect(await database.select().from(sessions).get()).toBeUndefined();
+    expect(await database.select().from(accounts).get()).toBeUndefined();
+  });
+
+  it("preserves every user accounting CHECK while allowing only null or valid handles", async () => {
+    const { user } = await seedOwnershipGraph();
+    const definition = await env.DB.prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user'",
+    ).first<{ sql: string }>();
+    expect(definition?.sql).toContain("user_canonical_handle_length");
+    expect(definition?.sql).toContain("user_active_logical_bytes_non_negative");
+    expect(definition?.sql).toContain("user_reserved_active_delta_bytes_non_negative");
+    expect(definition?.sql).toContain("user_retained_staged_physical_bytes_non_negative");
+    expect(definition?.sql).toContain("user_reserved_physical_upload_bytes_non_negative");
+
+    await expect(
+      env.DB.prepare("UPDATE user SET canonical_handle = 'x' WHERE id = ?").bind(user.id).run(),
+    ).rejects.toThrow("user_canonical_handle_length");
+    await env.DB.prepare("UPDATE user SET canonical_handle = NULL WHERE id = ?")
+      .bind(user.id)
+      .run();
+
+    for (const [column, constraint] of [
+      ["active_logical_bytes", "user_active_logical_bytes_non_negative"],
+      ["reserved_active_delta_bytes", "user_reserved_active_delta_bytes_non_negative"],
+      ["retained_staged_physical_bytes", "user_retained_staged_physical_bytes_non_negative"],
+      ["reserved_physical_upload_bytes", "user_reserved_physical_upload_bytes_non_negative"],
+    ] as const) {
+      await expect(
+        env.DB.prepare(`UPDATE user SET ${column} = -1 WHERE id = ?`).bind(user.id).run(),
+      ).rejects.toThrow(constraint);
+    }
   });
 
   it("round-trips every accounting table with Drizzle types", async () => {

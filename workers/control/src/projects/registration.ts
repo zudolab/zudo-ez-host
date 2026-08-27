@@ -35,6 +35,7 @@ export interface ProjectRegistrationOptions {
 export type ProjectRegistrationErrorCode =
   | "invalid_owner_context"
   | "owner_not_found"
+  | "owner_handle_unclaimed"
   | "invalid_slug"
   | "invalid_owner_handle"
   | "invalid_display_name"
@@ -67,7 +68,7 @@ export interface ProjectRegistrationResult {
 
 interface UserRow {
   readonly id: string;
-  readonly canonicalHandle: string;
+  readonly canonicalHandle: string | null;
 }
 
 function registrationInvariant(message: string): ProjectRegistrationError {
@@ -233,6 +234,12 @@ export async function registerProject(
 
   // The canonical handle is loaded from the owner row. Any extra handle-like
   // field on the request or context is intentionally ignored.
+  if (user.canonicalHandle === null) {
+    throw new ProjectRegistrationError(
+      "owner_handle_unclaimed",
+      "Authenticated owner must claim a canonical handle before registering a project",
+    );
+  }
   const handle = validateHandle(user.canonicalHandle);
   if (!handle.ok) {
     throw new ProjectRegistrationError(

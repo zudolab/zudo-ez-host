@@ -190,7 +190,6 @@ describe("publication prepare", () => {
         context.set(MACHINE_AUTH_CONTEXT_KEY, {
           userId: owner.user.id,
           machineId: owner.machine.id,
-          canonicalHandle: owner.user.canonicalHandle,
         });
         await next();
       }),

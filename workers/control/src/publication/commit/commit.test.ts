@@ -285,7 +285,6 @@ describe("publication commit", () => {
         context.set(MACHINE_AUTH_CONTEXT_KEY, {
           userId: owner.user.id,
           machineId: owner.machines[0]!.id,
-          canonicalHandle: owner.user.canonicalHandle,
         });
         await next();
       }),

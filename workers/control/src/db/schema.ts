@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   check,
   foreignKey,
@@ -16,16 +16,32 @@ export const users = sqliteTable(
   "user",
   {
     id: text("id").primaryKey(),
-    canonicalHandle: text("canonical_handle").notNull(),
+    canonicalHandle: text("canonical_handle"),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+    image: text("image"),
     activeLogicalBytes: integer("active_logical_bytes").notNull().default(0),
     reservedActiveDeltaBytes: integer("reserved_active_delta_bytes").notNull().default(0),
     retainedStagedPhysicalBytes: integer("retained_staged_physical_bytes").notNull().default(0),
     reservedPhysicalUploadBytes: integer("reserved_physical_upload_bytes").notNull().default(0),
-    createdAt: integer("created_at").notNull(),
+    // Better Auth passes and expects a Date for this shared column. Its generated
+    // SQLite schema uses timestamp_ms, so keep one physical created_at column and
+    // convert the accounting fixtures at the seed boundary. Unlike the generator,
+    // this deliberately retains the accounting schema's pre-existing lack of a
+    // SQL default; both Better Auth and accounting writes provide the value.
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
   },
   (table) => [
     uniqueIndex("user_canonical_handle_unique").on(table.canonicalHandle),
-    check("user_canonical_handle_length", sql`length(${table.canonicalHandle}) between 3 and 20`),
+    check(
+      "user_canonical_handle_length",
+      sql`${table.canonicalHandle} is null or length(${table.canonicalHandle}) between 3 and 20`,
+    ),
     check("user_active_logical_bytes_non_negative", nonNegative(table.activeLogicalBytes)),
     check(
       "user_reserved_active_delta_bytes_non_negative",
@@ -41,6 +57,104 @@ export const users = sqliteTable(
     ),
   ],
 );
+
+export const sessions = sqliteTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .$onUpdate(() => new Date())
+      .notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("session_userId_idx").on(table.userId)],
+);
+
+export const accounts = sqliteTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    issuer: text("issuer").notNull(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp_ms" }),
+    refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp_ms" }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_issuer_accountId_uidx").on(table.issuer, table.accountId),
+    index("account_userId_idx").on(table.userId),
+  ],
+);
+
+export const verifications = sqliteTable(
+  "verification",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("verification_identifier_idx").on(table.identifier)],
+);
+
+// Better Auth 1.7.2's generated database rate-limit model. Keep the physical
+// camel-case table and field mapping aligned with the adapter's `rateLimit`
+// model so database-backed throttling does not silently fall back to memory.
+export const rateLimits = sqliteTable("rateLimit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request", { mode: "number" }).notNull(),
+});
+
+export const userRelations = relations(users, ({ many }) => ({
+  sessions: many(sessions),
+  accounts: many(accounts),
+}));
+
+export const sessionRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const accountRelations = relations(accounts, ({ one }) => ({
+  user: one(users, {
+    fields: [accounts.userId],
+    references: [users.id],
+  }),
+}));
 
 export const machines = sqliteTable(
   "machines",
@@ -68,6 +182,32 @@ export const machines = sqliteTable(
       "machines_one_year_max_lifetime",
       sql`${table.expiresAt} <= ${table.createdAt} + 31536000000`,
     ),
+  ],
+);
+
+export const desktopAuthorizationCodes = sqliteTable(
+  "desktop_authorization_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    redirectUri: text("redirect_uri").notNull(),
+    codeChallenge: text("code_challenge").notNull(),
+    codeChallengeMethod: text("code_challenge_method", { enum: ["S256"] }).notNull(),
+    scope: text("scope", { enum: ["publish"] }).notNull(),
+    machineName: text("machine_name").notNull(),
+    machineId: text("machine_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    consumedAt: integer("consumed_at"),
+  },
+  (table) => [
+    uniqueIndex("desktop_authorization_codes_machine_id_unique").on(table.machineId),
+    index("desktop_authorization_codes_user_id_idx").on(table.userId),
+    check("desktop_authorization_codes_method_s256", sql`${table.codeChallengeMethod} = 'S256'`),
+    check("desktop_authorization_codes_scope_publish", sql`${table.scope} = 'publish'`),
+    check("desktop_authorization_codes_expiry", sql`${table.expiresAt} > ${table.createdAt}`),
   ],
 );
 
@@ -321,6 +461,9 @@ export const publicationObjects = sqliteTable(
 );
 
 export const schema = {
+  accountRelations,
+  accounts,
+  desktopAuthorizationCodes,
   hostnameAllocations,
   machines,
   projectHeads,
@@ -329,12 +472,22 @@ export const schema = {
   publicationAttempts,
   publicationObjects,
   publications,
+  rateLimits,
+  sessionRelations,
+  sessions,
+  userRelations,
   users,
+  verifications,
   verifiedObjects,
 };
 
 export type User = typeof users.$inferSelect;
+export type Session = typeof sessions.$inferSelect;
+export type Account = typeof accounts.$inferSelect;
+export type Verification = typeof verifications.$inferSelect;
+export type RateLimit = typeof rateLimits.$inferSelect;
 export type Machine = typeof machines.$inferSelect;
+export type DesktopAuthorizationCode = typeof desktopAuthorizationCodes.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type HostnameAllocation = typeof hostnameAllocations.$inferSelect;
 export type PublicationAttempt = typeof publicationAttempts.$inferSelect;

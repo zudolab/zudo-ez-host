@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e6f737e3-2495-445b-9c4d-2091fff4c141",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "80af6582-f6b1-411d-a96d-df93ed20ec5f",
+  "prevId": "350e3421-2c13-459b-8e75-a87c5b3e1eb1",
   "tables": {
     "account": {
       "name": "account",
@@ -133,6 +133,127 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "desktop_authorization_codes": {
+      "name": "desktop_authorization_codes",
+      "columns": {
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "redirect_uri": {
+          "name": "redirect_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_challenge": {
+          "name": "code_challenge",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_challenge_method": {
+          "name": "code_challenge_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "machine_name": {
+          "name": "machine_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "machine_id": {
+          "name": "machine_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "desktop_authorization_codes_machine_id_unique": {
+          "name": "desktop_authorization_codes_machine_id_unique",
+          "columns": ["machine_id"],
+          "isUnique": true
+        },
+        "desktop_authorization_codes_user_id_idx": {
+          "name": "desktop_authorization_codes_user_id_idx",
+          "columns": ["user_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "desktop_authorization_codes_user_id_user_id_fk": {
+          "name": "desktop_authorization_codes_user_id_user_id_fk",
+          "tableFrom": "desktop_authorization_codes",
+          "tableTo": "user",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "desktop_authorization_codes_method_s256": {
+          "name": "desktop_authorization_codes_method_s256",
+          "value": "\"desktop_authorization_codes\".\"code_challenge_method\" = 'S256'"
+        },
+        "desktop_authorization_codes_scope_publish": {
+          "name": "desktop_authorization_codes_scope_publish",
+          "value": "\"desktop_authorization_codes\".\"scope\" = 'publish'"
+        },
+        "desktop_authorization_codes_expiry": {
+          "name": "desktop_authorization_codes_expiry",
+          "value": "\"desktop_authorization_codes\".\"expires_at\" > \"desktop_authorization_codes\".\"created_at\""
+        }
+      }
     },
     "hostname_allocations": {
       "name": "hostname_allocations",
@@ -1044,6 +1165,50 @@
           "value": "length(\"publications\".\"machine_name_snapshot\") between 1 and 100"
         }
       }
+    },
+    "rateLimit": {
+      "name": "rateLimit",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_request": {
+          "name": "last_request",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "rateLimit_key_unique": {
+          "name": "rateLimit_key_unique",
+          "columns": ["key"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "session": {
       "name": "session",

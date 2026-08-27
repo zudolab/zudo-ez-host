@@ -7,6 +7,7 @@ import {
 } from "./auth/index.js";
 import { projectsRouter } from "./projects/index.js";
 import { publicationContractsRouter } from "./publication/contracts/index.js";
+import { publicationPrepareRouter } from "./publication/prepare/index.js";
 import { healthRouter } from "./routes/health.js";
 
 export const app = new Hono<MachineAuthEnv>();
@@ -16,4 +17,5 @@ app.use("/projects", machineAuthMiddleware);
 app.use("/projects/*", machineAuthMiddleware);
 app.route("/projects", projectsRouter);
 app.use(MACHINE_AUTH_PUBLISH_PATH, machineAuthMiddleware);
+app.route("/api/projects/:projectId/publish", publicationPrepareRouter);
 app.route("/api/projects/:projectId/publish", publicationContractsRouter);

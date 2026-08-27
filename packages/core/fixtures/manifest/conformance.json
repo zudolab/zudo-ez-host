@@ -38,6 +38,28 @@
         ]
       },
       "canonical": "{\"version\":1,\"servingSemanticsVersion\":1,\"entries\":[{\"path\":\"download\",\"sha256\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"size\":3,\"contentType\":\"application/octet-stream\"}]}"
+    },
+    {
+      "name": "orders Unicode paths by UTF-8 bytes and escapes string content",
+      "input": {
+        "version": 1,
+        "servingSemanticsVersion": 1,
+        "entries": [
+          {
+            "path": "\ud83d\ude00.txt",
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+            "size": 4,
+            "contentType": "text/plain; profile=\"emoji\""
+          },
+          {
+            "path": "\ue000.txt",
+            "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+            "size": 2,
+            "contentType": "text/plain"
+          }
+        ]
+      },
+      "canonical": "{\"version\":1,\"servingSemanticsVersion\":1,\"entries\":[{\"path\":\"\ue000.txt\",\"sha256\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"size\":2,\"contentType\":\"text/plain\"},{\"path\":\"\ud83d\ude00.txt\",\"sha256\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"size\":4,\"contentType\":\"text/plain; profile=\\\"emoji\\\"\"}]}"
     }
   ],
   "rejected": [

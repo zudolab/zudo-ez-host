@@ -197,7 +197,7 @@ describe("control D1 schema", () => {
     const { database, project } = await seedOwnershipGraph();
     const allocation = await allocatePermanentHostname(env.DB, project.id, NOW);
 
-    expect(allocation?.label).toBe("portfolio--owner");
+    expect(allocation.label).toBe("portfolio--owner");
     expect((await getHostnameAllocation(database, project.id))?.label).toBe("portfolio--owner");
     await expect(
       env.DB.prepare("UPDATE hostname_allocations SET label = ? WHERE project_id = ?")
@@ -233,6 +233,50 @@ describe("control D1 schema", () => {
         )
         .run(),
     ).rejects.toThrow("machines_one_year_max_lifetime");
+  });
+
+  it("requires a project head's generation to match its immutable publication", async () => {
+    const { database, machine, project, user } = await seedOwnershipGraph();
+    await database.insert(publicationAttempts).values({
+      id: "att_generation",
+      projectId: project.id,
+      userId: user.id,
+      machineId: machine.id,
+      state: "committed",
+      baseGeneration: 0,
+      baseLogicalBytes: 0,
+      stagedManifestR2Key: "staging/generation.json",
+      manifestHash: "generation-manifest-hash",
+      logicalBytes: 0,
+      fileCount: 0,
+      reservedActiveDeltaBytes: 0,
+      reservedPhysicalUploadBytes: 0,
+      createdAt: NOW,
+      expiresAt: NOW + 1_000,
+      settledAt: NOW + 1,
+    });
+    await database.insert(publications).values({
+      id: "pub_generation",
+      projectId: project.id,
+      attemptId: "att_generation",
+      generation: 1,
+      artifactHash: "generation-artifact-hash",
+      machineId: machine.id,
+      machineNameSnapshot: machine.name,
+      logicalBytes: 0,
+      physicalBytes: 0,
+      fileCount: 0,
+      objectCount: 0,
+      publishedAt: NOW + 1,
+    });
+
+    await expect(
+      env.DB.prepare(
+        "UPDATE project_heads SET publication_id = ?, generation = ? WHERE project_id = ?",
+      )
+        .bind("pub_generation", 2, project.id)
+        .run(),
+    ).rejects.toThrow("project head publication generation mismatch");
   });
 
   it("rejects cross-owner attempt rows", async () => {

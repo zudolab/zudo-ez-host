@@ -28,6 +28,28 @@ BEFORE DELETE ON publication_objects
 BEGIN
 	SELECT RAISE(ABORT, 'publication objects are immutable');
 END;--> statement-breakpoint
+CREATE TRIGGER project_heads_publication_generation_insert
+BEFORE INSERT ON project_heads
+WHEN NEW.publication_id IS NOT NULL AND NOT EXISTS (
+	SELECT 1 FROM publications
+	WHERE id = NEW.publication_id
+		AND project_id = NEW.project_id
+		AND generation = NEW.generation
+)
+BEGIN
+	SELECT RAISE(ABORT, 'project head publication generation mismatch');
+END;--> statement-breakpoint
+CREATE TRIGGER project_heads_publication_generation_update
+BEFORE UPDATE OF project_id, publication_id, generation ON project_heads
+WHEN NEW.publication_id IS NOT NULL AND NOT EXISTS (
+	SELECT 1 FROM publications
+	WHERE id = NEW.publication_id
+		AND project_id = NEW.project_id
+		AND generation = NEW.generation
+)
+BEGIN
+	SELECT RAISE(ABORT, 'project head publication generation mismatch');
+END;--> statement-breakpoint
 CREATE TRIGGER verified_objects_size_immutable
 BEFORE UPDATE OF project_id, content_hash, size_bytes ON verified_objects
 BEGIN

@@ -50,6 +50,11 @@ export async function executeGuardedBatch(
   }
 
   const results = await database.batch(statements.map(({ statement }) => statement));
+  if (results.length !== statements.length) {
+    throw new Error(
+      `D1 guarded batch returned ${results.length} result(s) for ${statements.length} statement(s)`,
+    );
+  }
   const failures: GuardFailure[] = [];
 
   for (const [index, result] of results.entries()) {

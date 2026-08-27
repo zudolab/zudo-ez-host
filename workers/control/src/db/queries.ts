@@ -129,12 +129,16 @@ export async function allocatePermanentHostname(
     { name: "allocate permanent hostname", statement: insert, expectedChanges: 1 },
   ]);
 
-  return binding
+  const allocation = await binding
     .prepare(
       "SELECT label, user_id AS userId, project_id AS projectId, created_at AS createdAt FROM hostname_allocations WHERE project_id = ?",
     )
     .bind(projectId)
     .first<{ label: string; userId: string; projectId: string; createdAt: number }>();
+  if (allocation === null) {
+    throw new Error("Permanent hostname allocation disappeared after guarded insert");
+  }
+  return allocation;
 }
 
 export async function getHostnameAllocation(database: ControlDatabase, projectId: string) {

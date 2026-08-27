@@ -140,8 +140,13 @@ describe("exact control origins", () => {
       });
 
       const safe = await app.request(`${BASE_URL}${path}`, { headers: { cookie } }, authEnv);
-      expect(safe.status, path).toBe(404);
-      await expect(safe.json()).resolves.toEqual({ error: "route_not_implemented" });
+      if (path === "/api/machines") {
+        expect(safe.status, path).toBe(200);
+        await expect(safe.json()).resolves.toEqual({ machines: [] });
+      } else {
+        expect(safe.status, path).toBe(404);
+        await expect(safe.json()).resolves.toEqual({ error: "route_not_implemented" });
+      }
     }
 
     const desktopParameters = new URLSearchParams({

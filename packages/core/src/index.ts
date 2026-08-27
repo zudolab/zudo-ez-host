@@ -52,3 +52,4 @@ export type {
   ValidatedManifest,
   ValidatedManifestLookup,
 } from "./manifest/index.js";
+export * from "./serving/index.js";

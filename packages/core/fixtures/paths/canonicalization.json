@@ -1,0 +1,22 @@
+{
+  "accepted": [
+    { "input": "index.html", "output": "index.html" },
+    { "input": "assets/main.css", "output": "assets/main.css" },
+    { "input": "space and-emoji/🚀.txt", "output": "space and-emoji/🚀.txt" },
+    { "input": "caf\u00e9/menu.txt", "output": "caf\u00e9/menu.txt" },
+    { "input": "cafe\u0301/menu.txt", "output": "cafe\u0301/menu.txt" }
+  ],
+  "rejected": [
+    { "input": "", "reason": "empty_path" },
+    { "input": "/index.html", "reason": "absolute_path" },
+    { "input": "//server/share", "reason": "absolute_path" },
+    { "input": "assets//main.css", "reason": "empty_segment" },
+    { "input": "assets/", "reason": "empty_segment" },
+    { "input": "./index.html", "reason": "dot_segment" },
+    { "input": "assets/./main.css", "reason": "dot_segment" },
+    { "input": "../secret.txt", "reason": "parent_segment" },
+    { "input": "assets/../secret.txt", "reason": "parent_segment" },
+    { "input": "assets\\main.css", "reason": "backslash" },
+    { "input": "nul\u0000byte.txt", "reason": "nul_byte" }
+  ]
+}

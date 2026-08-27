@@ -1,0 +1,49 @@
+{
+  "cases": [
+    {
+      "name": "case-only file collision",
+      "paths": ["README.txt", "readme.txt"],
+      "collision": ["README.txt", "readme.txt"]
+    },
+    {
+      "name": "case collisions compare the complete path",
+      "paths": ["Assets/Logo.svg", "assets/logo.svg"],
+      "collision": ["Assets/Logo.svg", "assets/logo.svg"]
+    },
+    {
+      "name": "NFC and NFD collision",
+      "paths": ["caf\u00e9/menu.txt", "cafe\u0301/menu.txt"],
+      "collision": ["caf\u00e9/menu.txt", "cafe\u0301/menu.txt"]
+    },
+    {
+      "name": "NFC normalization and case folding compose",
+      "paths": ["\u212Aelvin.txt", "kelvin.txt"],
+      "collision": ["\u212Aelvin.txt", "kelvin.txt"]
+    },
+    {
+      "name": "returns the first pair from a set with multiple collisions",
+      "paths": ["A.txt", "a.txt", "B.txt", "b.txt"],
+      "collision": ["A.txt", "a.txt"]
+    },
+    {
+      "name": "identical duplicate is not a distinct-path collision",
+      "paths": ["same.txt", "same.txt"],
+      "collision": null
+    },
+    {
+      "name": "case near miss",
+      "paths": ["readme.txt", "readme.md"],
+      "collision": null
+    },
+    {
+      "name": "normalization near miss",
+      "paths": ["caf\u00e9/menu.txt", "caf\u00e9/menus.txt"],
+      "collision": null
+    },
+    {
+      "name": "V1 lowercasing is not a Unicode full case fold",
+      "paths": ["Stra\u00dfe.txt", "STRASSE.txt"],
+      "collision": null
+    }
+  ]
+}

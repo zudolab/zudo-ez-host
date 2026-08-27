@@ -1,0 +1,145 @@
+---
+title: Hosting security
+description: Isolation, hostname, and password-gate rules for untrusted public content.
+sidebar_position: 3
+---
+
+Every hosted site can contain attacker-controlled HTML and JavaScript. The
+security boundary therefore assumes hostile content and treats convenient
+shared-domain or shared-cache behavior as unsafe by default. See
+[Hosting architecture](/docs/hosting/) for the cloud planes and
+[Static serving](/docs/hosting/static-serving/) for response semantics.
+
+## Threat model
+
+The design must withstand a malicious project trying to reach authenticated
+control-plane sessions, claim another project's hostname, traverse storage
+keys, publish executable metadata, persist a service worker beyond its
+authority, or obtain gated bytes through a cache. It also assumes the public
+Worker is a high-exposure component whose compromise must not reveal tenant
+passwords, signing secrets, authoring credentials, or write access.
+
+A different origin alone is insufficient: sibling subdomains can remain the
+same browser site. CORS also does not prevent cross-site requests or replace
+CSRF validation. The design uses separate registrable domains, host-only
+cookies, project-per-host origins, immutable identity mapping, least privilege,
+and authorization before bytes or cache.
+
+## Registrable-domain isolation
+
+`zudo-ez-host.app` is exclusively the authenticated control plane and
+marketing site. Untrusted sites use a separately purchased registrable domain,
+never a sibling such as `sites.zudo-ez-host.app`, at:
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+Control-plane session cookies use a `__Host-` prefix, `Secure`, `HttpOnly`,
+`Path=/`, no `Domain` attribute, and an appropriate `SameSite` value. The
+control API permits credentialed CORS only from the exact control origin—never
+`*`, the content domain, a reflected origin, or `null`—and independently
+enforces Origin and CSRF checks.
+
+Public sites emit no `Access-Control-Allow-Origin` by default. A future
+explicit project CORS option cannot affect control APIs. Gate cookies carry no
+control authority. Each project has its own host, so a project's service
+worker is contained to that origin and path scope and never shares the control
+origin. Platform-owned error and login pages use restrictive CSP and
+`frame-ancestors`; the platform does not silently impose a CSP on user files.
+
+## Least-privilege public responder
+
+The single public Worker is secrets-free and read-only. It has private R2 read
+access, a pinned public capability-verification key, and only narrow RPCs for
+current publication resolution and gate authorization. It has no D1 binding,
+password verifier or pepper, signing key, authoring credential, source bucket
+binding, write capability, general SQL, or general control-plane write RPC.
+
+`r2.dev`, public bucket access, and every direct artifact origin remain
+disabled. For every request, the Worker resolves the host and verifies current
+publication and gate state before any shared-cache lookup or R2 read. Generic
+denial responses do not reveal whether a project is nonexistent, unpublished,
+suspended, or unauthorized.
+
+## Hostname allocation and stability
+
+The V1 public label is `<project-slug>--<user-handle>`. Both components are
+canonical lowercase ASCII and match:
+
+```text
+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?
+```
+
+ASCII `A-Z` is normalized to lowercase before validation. V1 does not trim,
+perform Unicode normalization, or accept IDNs/punycode. Neither component may
+contain `--` or begin with `xn--`. Handles are 3–20 characters; project slugs
+are 1–41 characters; the complete label, including the two-character
+delimiter, is at most 63 octets.
+
+A centrally versioned reserved-name list includes at least `www`, `api`, `app`,
+`admin`, `auth`, `login`, `logout`, `account`, `billing`, `support`, `status`,
+`docs`, `cdn`, `assets`, `static`, `mail`, `ftp`, `localhost`, `staging`,
+`preview`, `internal`, `root`, and `system`, plus permanent-ID prefixes.
+
+Allocation is an atomic unique insert mapped to opaque immutable owner and
+project IDs. Parsing a hostname never proves ownership, and artifact keys use
+opaque IDs and hashes rather than labels. Display-name changes do not move the
+original URL. If URL aliases ship later, old labels remain aliases or
+tombstones permanently. Deleted or renamed labels are never assigned to a
+different owner or project, preventing bookmark, cookie, and service-worker
+takeover.
+
+## Password-gate boundary
+
+Per-project password protection defaults off. It is shared preview access, not
+visitor identity: it creates no individual users, roles, per-visitor audit, or
+selective visitor revocation.
+
+When enabled, a private gate service owns the slow salted password verifier and
+any pepper or signing secret. It exposes only purpose-specific authorization
+and password-verification RPC, not its data store or a general write surface.
+The public Worker sends password verification to that service and receives a
+short-lived signed capability containing the immutable project ID, exact
+public hostname, gate-version epoch, issued/expiry times, and random token ID.
+
+The Worker verifies the capability with its pinned public key and stores it in
+a host-only `__Host-` cookie with `Secure`, `HttpOnly`, `Path=/`, and
+`SameSite=Strict`. A capability is accepted only with current host, project,
+and epoch authorization; a valid signature alone is insufficient. Enabling,
+rotating, or disabling a gate increments its epoch and invalidates earlier
+capabilities.
+
+## Browser and cache rules
+
+The gate check occurs before content bytes, shared-cache lookup, or R2 read.
+Login and denial responses use `Cache-Control: no-store`. Every response for a
+gated project—including authorized artifacts—uses `Cache-Control: private,
+no-store` and `CDN-Cache-Control: no-store` and bypasses shared cache. The
+Worker does not call `cache.put`, and cache configuration must not override
+these headers. `Vary: Cookie` is defense in depth, not permission to cache.
+
+Gate login and denial pages set `X-Robots-Tag: noindex`, use restrictive CSP
+and `frame-ancestors`, and never echo or retain the submitted password in the
+response. Password verification uses a bounded request body, generic failure
+responses, constant-time comparison where applicable, and per-project and
+per-client rate limits.
+
+Ungated public artifacts may use artifact-hash-aware shared caching only after
+current publication authorization. User-controlled metadata cannot set
+platform cookies or override cache, CORS, CSP, or security headers.
+
+## Open questions
+
+Only these architecture details remain deferred:
+
+- Which slow password-verifier algorithm and parameters should the private
+  runtime use, including its rehash and migration path? What capability TTL
+  and verification rate limits fit the shared-password experience and abuse
+  budget?
+- Should the public-content domain later seek a Private/Public Suffix List
+  entry for stronger project-to-project site isolation? It is not required for
+  the control-plane boundary.
+- Will owners be allowed to allocate a new canonical URL alias after a handle
+  or project rename? Whether aliases ship or not, every old label remains
+  permanently non-reassignable.

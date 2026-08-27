@@ -1,0 +1,135 @@
+---
+title: ホスティングセキュリティ
+description: untrusted public content の isolation、hostname、password-gate rule です。
+sidebar_position: 3
+---
+
+すべての hosted site に attacker-controlled HTML / JavaScript が含まれる可能性が
+あります。そのため security boundary は hostile content を前提とし、便利であっても
+shared-domain / shared-cache の動作を既定では安全と見なしません。cloud plane は
+[ホスティングアーキテクチャ](/ja/docs/hosting/)、response semantics は
+[静的配信](/ja/docs/hosting/static-serving/)を参照してください。
+
+## Threat model
+
+悪意ある project が、authenticated control-plane session への到達、別 project の
+hostname の取得、storage key の traversal、executable metadata の公開、権限を越えた
+service worker の存続、cache 経由での gated byte の取得を試みることを想定します。
+また public Worker は外部に露出する component であり、侵害されても tenant password、
+signing secret、authoring credential、write access を公開してはなりません。
+
+異なる origin だけでは不十分です。sibling subdomain は browser 上で同じ site のままに
+なり得ます。CORS も cross-site request を防止せず、CSRF validation の代替にはなりません。
+別の registrable domain、host-only cookie、project-per-host origin、immutable identity
+mapping、least privilege、byte / cache より先の authorization を組み合わせます。
+
+## Registrable-domain isolation
+
+`zudo-ez-host.app` は authenticated control plane と marketing 専用です。untrusted site
+には、`sites.zudo-ez-host.app` のような sibling ではなく、別途購入した registrable
+domain を次の形式で使用します。
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+control-plane session cookie には `__Host-` prefix、`Secure`、`HttpOnly`、`Path=/`、
+適切な `SameSite` value を設定し、`Domain` attribute は設定しません。control API が
+credentialed CORS を許可するのは exact control origin だけです。`*`、content domain、
+reflected origin、`null` は許可せず、独立して Origin / CSRF check も実施します。
+
+public site は既定で `Access-Control-Allow-Origin` を返しません。将来の明示的な
+project CORS option が control API に影響することはありません。gate cookie は control
+authority を持ちません。各 project は固有の host を持つため、project の service worker
+はその origin / path scope に閉じ込められ、control origin を共有しません。platform-owned
+error / login page は制限の厳しい CSP と `frame-ancestors` を使用します。platform が
+user file に暗黙の CSP を課すことはありません。
+
+## Least-privilege public responder
+
+単一の public Worker は secrets-free かつ read-only です。private R2 read access、固定した
+public capability-verification key、current publication resolution と gate authorization
+用の限定 RPC だけを持ちます。D1 binding、password verifier / pepper、signing key、
+authoring credential、source bucket binding、write capability、general SQL、汎用の
+control-plane write RPC は持ちません。
+
+`r2.dev`、public bucket access、すべての direct artifact origin を無効のままにします。
+すべての request で、Worker は shared-cache lookup / R2 read より先に host を解決し、
+current publication / gate state を検証します。generic denial response は、project が
+nonexistent、unpublished、suspended、unauthorized のどれかを公開しません。
+
+## Hostname allocation and stability
+
+V1 public label は `<project-slug>--<user-handle>` です。両 component は canonical
+lowercase ASCII で、次に一致します。
+
+```text
+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?
+```
+
+validation 前に ASCII `A-Z` を lowercase に normalize します。V1 では trim、Unicode
+normalization、IDN / punycode の受け入れを行いません。どちらの component も `--` を
+含めることも、`xn--` で始めることもできません。handle は 3–20 character、project
+slug は 1–41 character、2-character delimiter を含む label 全体は 63 octet 以下です。
+
+centrally versioned reserved-name list には、少なくとも `www`、`api`、`app`、`admin`、
+`auth`、`login`、`logout`、`account`、`billing`、`support`、`status`、`docs`、`cdn`、
+`assets`、`static`、`mail`、`ftp`、`localhost`、`staging`、`preview`、`internal`、
+`root`、`system` と permanent-ID prefix を含めます。
+
+allocation は、opaque immutable owner / project ID に mapping する atomic unique insert
+です。hostname の parse は ownership の証明にならず、artifact key は label ではなく
+opaque ID / hash を使います。display-name change で元の URL は移動しません。将来 URL
+alias が提供されても、古い label は永久に alias / tombstone として保持します。delete
+または rename された label を別 owner / project に割り当てることはなく、bookmark、
+cookie、service-worker takeover を防ぎます。
+
+## Password-gate boundary
+
+per-project password protection は既定で off です。これは shared preview access であり、
+visitor identity ではありません。individual user、role、per-visitor audit、特定 visitor
+だけの revocation は作りません。
+
+有効な場合、private gate service が slow salted password verifier と、採用する pepper /
+signing secret を所有します。公開するのは purpose-specific authorization / password-
+verification RPC だけで、data store や general write surface は公開しません。public
+Worker は password verification をこの service に送り、immutable project ID、exact
+public hostname、gate-version epoch、issued/expiry time、random token ID を含む short-lived
+signed capability を受け取ります。
+
+Worker は固定した public key で capability を検証し、`Secure`、`HttpOnly`、`Path=/`、
+`SameSite=Strict` を持つ host-only `__Host-` cookie に保存します。capability は current
+host、project、epoch の authorization が揃う場合だけ受理し、valid signature だけでは
+不十分です。gate の enable、rotate、disable は epoch を increment し、以前の capability
+を無効化します。
+
+## Browser and cache rules
+
+gate check は content byte、shared-cache lookup、R2 read より先に行います。login / denial
+response は `Cache-Control: no-store` を使用します。authorized artifact を含む gated
+project のすべての response は `Cache-Control: private, no-store` と
+`CDN-Cache-Control: no-store` を使用し、shared cache を bypass します。Worker は
+`cache.put` を呼ばず、cache configuration がこれらの header を上書きしてはなりません。
+`Vary: Cookie` は defense in depth であり、cache の許可ではありません。
+
+gate login / denial page は `X-Robots-Tag: noindex`、制限の厳しい CSP、
+`frame-ancestors` を設定し、送信された password を response に echo / retain しません。
+password verification は bounded request body、generic failure response、適用可能な
+constant-time comparison、per-project / per-client rate limit を使用します。
+
+gate のない public artifact は、current publication authorization の後でのみ、artifact-
+hash-aware shared caching を使用できます。user-controlled metadata が platform cookie
+を設定したり、cache、CORS、CSP、security header を上書きしたりすることはできません。
+
+## Open questions
+
+未決定の architecture detail は次だけです。
+
+- private runtime では、rehash / migration path を含め、どの slow password-verifier
+  algorithm / parameter を使用するか。shared-password experience と abuse budget に
+  適する capability TTL / verification rate limit は何か。
+- project 間の site isolation を強化するため、public-content domain について将来
+  Private/Public Suffix List entry を申請するか。control-plane boundary には不要です。
+- handle / project rename 後に、新しい canonical URL alias の allocation を owner に
+  許可するか。alias を提供するかどうかにかかわらず、古い label は永久に再割り当て
+  しません。

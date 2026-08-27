@@ -1,0 +1,89 @@
+---
+title: Static serving
+description: The versioned V1 contract for resolving and serving project artifacts.
+sidebar_position: 2
+---
+
+The public Worker applies one deterministic contract to every promoted
+artifact. It does not inherit behavior from the uploader's filesystem or a
+local preview server. See [Hosting architecture](/docs/hosting/) for the
+artifact boundary and [Hosting security](/docs/hosting/security/) for
+authorization and cache isolation.
+
+## Versioned serving contract
+
+Every artifact manifest records its serving-semantics version. Under V1,
+content endpoints accept `GET` and `HEAD`. Other methods return 405 with
+`Allow: GET, HEAD`; the narrow password-gate login endpoint is the only `POST`
+exception.
+
+The query string is ignored for artifact lookup but retained in redirects.
+Every resolution uses a validated manifest entry and normalized path—never a
+raw URL path concatenated into an R2 key.
+
+## Path and index resolution
+
+Resolution is ordered and case-sensitive:
+
+1. An exact path resolves only the exact artifact entry. `/x.css` resolves
+   `x.css`; it does not match another case and does not gain implicit `.html`.
+2. `/` resolves the root `index.html`.
+3. A path ending in `/` resolves that directory's `index.html`.
+4. If `/docs` is not an exact file but `docs/index.html` exists, the Worker
+   returns a permanent 308 redirect to `/docs/` and preserves the query string.
+5. Otherwise, the request follows the not-found or enabled SPA rule below.
+
+The 308 directory form makes relative URLs deterministic. It is emitted only
+when the corresponding `index.html` exists.
+
+## Errors, MIME, and cache
+
+When no entry resolves, the Worker serves the project's root `404.html` with
+status 404 if it exists. Otherwise, it returns a small platform-owned 404.
+Error responses never expose object keys or distinguish unpublished,
+suspended, nonexistent, and unauthorized projects.
+
+Content type comes from platform-derived, versioned extension metadata stored
+in the manifest—not user-supplied upload headers. Unknown types use
+`application/octet-stream`. Artifact responses emit `Content-Type` and
+`X-Content-Type-Options: nosniff`.
+
+For ungated public projects, cache keys include the exact artifact hash and
+normalized path. Fingerprinted assets may use `Cache-Control: public,
+max-age=31536000, immutable`; mutable HTML entry points revalidate, with ETags
+and a bounded CDN TTL. Misses are not cached for long. Current
+publication/takedown authorization always precedes cache reads. User metadata
+cannot override platform cache, cookie, CORS, CSP, or security headers.
+
+Every response for a gated project bypasses shared cache as defined in
+[Hosting security](/docs/hosting/security/).
+
+## SPA fallback
+
+SPA fallback is off by default. An explicit per-project flag is reserved to
+enable it. When enabled, only an unmatched `GET` or `HEAD` HTML navigation
+request receives the root `index.html` with status 200. Missing asset-like
+requests remain 404.
+
+The fallback never replaces exact-file, directory-index, or safety rules, and
+it is not an unconditional rewrite that hides missing scripts, styles, images,
+or other assets.
+
+## Filesystem safety
+
+The uploader and server enforce the same conservative path boundary:
+
+- Percent encoding is parsed once. Malformed encoding, NUL, backslash, encoded
+  separators, and `.` or `..` path segments are rejected.
+- Lookup preserves and compares path bytes case-sensitively. A publication is
+  rejected if it contains portable case or normalization collisions, such as
+  `Logo.png` and `logo.png`, so behavior cannot depend on the Mac filesystem.
+- Every symlink is rejected at sync time, even if its current target is inside
+  the project. This prevents later retargeting, cycles, host-dependent output,
+  and reads outside the selected root.
+- Every dot-prefixed path segment is excluded by default. A future exact
+  allowlist may admit selected safe `.well-known/*` paths, but repository,
+  environment, editor, and credential files must never be published.
+
+DNS labels are separately canonical lowercase and case-insensitive; that does
+not weaken case-sensitive artifact lookup.

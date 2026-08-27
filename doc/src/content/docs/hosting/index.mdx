@@ -1,0 +1,112 @@
+---
+title: Hosting architecture
+description: Cloud boundaries, request flow, and deployment prerequisites for public sites.
+sidebar_position: 1
+---
+
+zudo-ez-host publishes user-controlled files without giving those files access
+to the authenticated product. This page defines the cloud boundary. The exact
+edge behavior is specified in [Static serving](/docs/hosting/static-serving/),
+and its trust model is specified in [Hosting security](/docs/hosting/security/).
+
+## System boundaries
+
+The system has three planes with intentionally different authority:
+
+1. The **control plane** owns accounts, projects, hostname allocation,
+   publication heads, quotas, password gates, and audit state in D1.
+2. The **private upload/staging plane** accepts authenticated publication
+   attempts and immutable uploaded objects before promotion.
+3. The **public artifact plane** stores validated, immutable,
+   content-addressed artifacts in a private R2 bucket and serves only promoted
+   publications.
+
+The public edge is one trusted, secrets-free Worker. It can read the private
+artifact bucket and call narrow resolution and gate-authorization RPCs. It has
+only public capability-verification material. It has no D1 binding, tenant
+password verifier or pepper, signing secret, authoring credential, source
+binding, R2 write capability, or general-purpose control-plane RPC.
+
+This split ensures that compromising public content or the public responder
+does not grant authoring authority or expose the service's tenant secrets.
+
+## Publication-to-request flow
+
+Publication and serving meet only at an atomic publication head:
+
+```text
+Mac app
+  -> authenticated prepare/upload/commit
+  -> private upload/staging objects
+  -> validated immutable artifact in private R2
+  -> atomic D1 publication-head promotion
+
+Visitor
+  -> project hostname
+  -> public Worker
+  -> narrow current-publication/gate authorization
+  -> authorized cache lookup
+  -> private R2 artifact read on a miss
+```
+
+An upload is never live merely because its bytes reached R2. Only an atomic
+promotion makes an immutable artifact current, so a request cannot observe a
+partially uploaded site. On every request, current publication and gate
+authorization happens before any shared-cache lookup or R2 read. Public cache
+keys include the exact artifact hash and normalized path rather than only the
+vanity hostname, so an older artifact cannot be mistaken for the current one.
+The prepare, upload, and atomic promotion protocol is defined in the
+[Sync protocol](/docs/sync/).
+
+## Cloudflare resources
+
+The hosting boundary uses:
+
+- D1 in the private control boundary for identity, allocation, publication,
+  quota, gate, and audit state;
+- private R2 storage for immutable public artifacts, with `r2.dev` and public
+  bucket access disabled;
+- one public Worker with R2 read access and a narrow named service entrypoint
+  for resolution and gate authorization; and
+- a proxied wildcard DNS record, wildcard Workers route, and verified
+  one-label TLS coverage for the public-content domain.
+
+DNS proxying, Worker routing, and certificate readiness are separate checks.
+Passing one does not prove the others. Direct R2 public or custom-domain
+serving is forbidden because it would bypass hostname resolution, gates,
+custom errors, SPA policy, and takedown authorization.
+
+## Why not Workers for Platforms
+
+Workers for Platforms is rejected for V1 because tenants upload files, not
+executable Worker code. Its current pricing snapshot starts at **$25/month**
+and includes **20 million requests**, **60 million CPU-ms**, and **1,000
+scripts**. Dispatch lifecycle, tenant scripts, and compute isolation add no
+storage-key or authorization isolation needed by this static-file design.
+
+Reconsider Workers for Platforms only if customers can deploy executable code
+or require tenant-specific runtime bindings or limits. Until then, one
+least-privilege responder over immutable artifacts is the smaller security and
+operations boundary.
+
+## Deployment prerequisites
+
+Production requires two registrable domains. `zudo-ez-host.app` is only for
+the authenticated control plane and marketing. Public sites use:
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+Before launch, a human owner must choose an available public-content domain,
+verify its first-year and renewal prices, approve and purchase it, and record
+renewal ownership and recovery. The same controlled purchase prerequisite
+applies to `zudo-ez-host.app`. Both registrations need registrar lock, DNSSEC,
+auto-renew, verified contacts, monitored billing, and expiry alerts. The
+selected content domain must be recorded in environment configuration, and
+placeholder examples must be replaced before launch.
+
+Production readiness also requires the wildcard DNS record, Worker route, and
+one-label certificate checks above, plus HTTPS smoke tests. Because `.app` is
+HSTS-preloaded, it has no usable HTTP fallback while DNS or TLS is incomplete;
+local development uses `localhost`.

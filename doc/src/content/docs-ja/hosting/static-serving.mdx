@@ -1,0 +1,90 @@
+---
+title: 静的配信
+description: project artifact を解決して配信する versioned V1 contract です。
+sidebar_position: 2
+---
+
+public Worker は、すべての promote 済み artifact に単一の deterministic contract を
+適用します。uploader の filesystem や local preview server の動作は継承しません。
+artifact boundary は[ホスティングアーキテクチャ](/ja/docs/hosting/)、authorization
+と cache isolation は[ホスティングセキュリティ](/ja/docs/hosting/security/)を参照して
+ください。
+
+## Versioned serving contract
+
+すべての artifact manifest は serving-semantics version を記録します。V1 の content
+endpoint は `GET` と `HEAD` を受け付けます。それ以外の method には 405 と
+`Allow: GET, HEAD` を返します。限定された password-gate login endpoint だけが
+`POST` の例外です。
+
+query string は artifact lookup では無視しますが、redirect には保持します。すべての
+resolution は validated manifest entry と normalized path を使用し、raw URL path を
+R2 key に連結することはありません。
+
+## Path and index resolution
+
+resolution は次の順序で case-sensitive に行います。
+
+1. exact path は exact artifact entry だけを解決します。`/x.css` は `x.css` を
+   解決しますが、別の case には一致せず、`.html` を暗黙に補いません。
+2. `/` は root の `index.html` を解決します。
+3. `/` で終わる path は、その directory の `index.html` を解決します。
+4. `/docs` が exact file ではなく `docs/index.html` が存在する場合、Worker は
+   `/docs/` への permanent 308 redirect を返し、query string を保持します。
+5. それ以外は、以下の not-found rule または有効な SPA rule に従います。
+
+308 の directory form により、relative URL の動作が deterministic になります。
+対応する `index.html` が存在する場合だけ、この redirect を返します。
+
+## Errors, MIME, and cache
+
+entry を解決できない場合、project root に `404.html` があれば status 404 で
+配信します。なければ、小さな platform-owned 404 を返します。error response は
+object key を公開せず、unpublished、suspended、nonexistent、unauthorized project を
+区別しません。
+
+Content-Type は user-supplied upload header ではなく、manifest に保存された、
+platform-derived かつ versioned な extension metadata から決定します。unknown type
+には `application/octet-stream` を使用します。artifact response は `Content-Type` と
+`X-Content-Type-Options: nosniff` を返します。
+
+gate のない public project では、cache key に正確な artifact hash と normalized path
+を含めます。fingerprinted asset には `Cache-Control: public,
+max-age=31536000, immutable` を使用でき、mutable HTML entry point は ETag と bounded
+CDN TTL を用いて revalidate します。miss は長時間 cache しません。current
+publication / takedown authorization は常に cache read より先です。user metadata が
+platform の cache、cookie、CORS、CSP、security header を上書きすることはできません。
+
+gated project のすべての response は、
+[ホスティングセキュリティ](/ja/docs/hosting/security/)で定義する通り shared cache を
+bypass します。
+
+## SPA fallback
+
+SPA fallback は既定で off です。有効化するための明示的な per-project flag を予約します。
+有効な場合も、一致しなかった `GET` / `HEAD` の HTML navigation request だけに root
+`index.html` を status 200 で返します。存在しない asset-like request は 404 のままです。
+
+fallback が exact-file、directory-index、safety rule を置き換えることはありません。
+また、存在しない script、style、image、その他の asset を隠す unconditional rewrite
+ではありません。
+
+## Filesystem safety
+
+uploader と server は、同じ保守的な path boundary を強制します。
+
+- percent encoding は 1 回だけ parse します。malformed encoding、NUL、backslash、
+  encoded separator、`.` / `..` path segment は拒否します。
+- path byte は保持し、case-sensitive に比較します。`Logo.png` と `logo.png` のような
+  portable case / normalization collision を含む publication は拒否し、動作が Mac
+  filesystem に依存しないようにします。
+- symlink は、現在の target が project 内にあっても sync 時にすべて拒否します。
+  later retargeting、cycle、host-dependent output、選択した root 外の read を防ぎます。
+- dot で始まる path segment は既定ですべて除外します。将来の exact allowlist で、
+  選択された安全な `.well-known/*` path を許可できますが、repository、environment、
+  editor、credential file は決して公開しません。
+
+DNS label は別途 canonical lowercase かつ case-insensitive です。これは artifact lookup
+の case-sensitive 性を弱めません。
+publishing client は、[sync protocol](/ja/docs/sync/)の一部として、promotion 前に
+これらの path exclusion を適用します。

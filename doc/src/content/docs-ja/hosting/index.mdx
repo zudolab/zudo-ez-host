@@ -1,0 +1,112 @@
+---
+title: ホスティングアーキテクチャ
+description: 公開サイトのクラウド境界、リクエストフロー、デプロイ前提条件です。
+sidebar_position: 1
+---
+
+zudo-ez-host は、ユーザーが管理するファイルに認証済みプロダクトへの権限を
+与えることなく公開します。このページではクラウド境界を定義します。正確な
+edge 動作は[静的配信](/ja/docs/hosting/static-serving/)、信頼モデルは
+[ホスティングセキュリティ](/ja/docs/hosting/security/)で定義します。
+
+## System boundaries
+
+システムは、意図的に権限を分けた 3 つの plane で構成します。
+
+1. **control plane** は、account、project、hostname allocation、publication
+   head、quota、password gate、D1 内の audit state を所有します。
+2. **private upload/staging plane** は、認証済みの publication attempt と、
+   promotion 前の immutable upload object を受け入れます。
+3. **public artifact plane** は、検証済みで immutable な content-addressed
+   artifact を private R2 bucket に保存し、promote 済み publication だけを
+   配信します。
+
+public edge は、信頼された単一の secrets-free Worker です。private artifact
+bucket の読み取りと、限定された resolution / gate-authorization RPC の呼び出しが
+可能です。保持するのは capability 検証用の公開情報だけです。D1 binding、tenant
+password verifier / pepper、signing secret、authoring credential、source binding、
+R2 write capability、汎用 control-plane RPC は持ちません。
+
+この分離により、public content や public responder が侵害されても、authoring
+権限や service の tenant secret は取得できません。
+
+## Publication-to-request flow
+
+publication と配信が接続するのは、atomic な publication head だけです。
+
+```text
+Mac app
+  -> authenticated prepare/upload/commit
+  -> private upload/staging objects
+  -> validated immutable artifact in private R2
+  -> atomic D1 publication-head promotion
+
+Visitor
+  -> project hostname
+  -> public Worker
+  -> narrow current-publication/gate authorization
+  -> authorized cache lookup
+  -> private R2 artifact read on a miss
+```
+
+byte が R2 に到達しただけでは upload は公開されません。atomic promotion だけが
+immutable artifact を current にするため、request が upload 途中の site を観測する
+ことはありません。すべての request で、current publication と gate の authorization
+を shared-cache lookup や R2 read より先に行います。public cache key には vanity
+hostname だけでなく、正確な artifact hash と normalized path を含めるため、古い
+artifact を current と誤認しません。
+prepare、upload、atomic promotion の protocol は
+[sync protocol](/ja/docs/sync/)で定義します。
+
+## Cloudflare resources
+
+ホスティング境界では次を使用します。
+
+- private control boundary 内の D1。identity、allocation、publication、quota、
+  gate、audit state を保持します。
+- immutable public artifact 用の private R2 storage。`r2.dev` と public bucket
+  access は無効にします。
+- R2 read access と、resolution / gate authorization 用の限定された named
+  service entrypoint を持つ単一の public Worker。
+- public-content domain 用の proxied wildcard DNS record、wildcard Workers
+  route、検証済みの one-label TLS coverage。
+
+DNS proxy、Worker routing、certificate readiness はそれぞれ別の確認項目です。
+1 つの成功は他の成功を意味しません。R2 の direct public / custom-domain 配信は、
+hostname resolution、gate、custom error、SPA policy、takedown authorization を
+bypass するため禁止します。
+
+## Why not Workers for Platforms
+
+tenant が upload するのは executable Worker code ではなく file であるため、V1 では
+Workers for Platforms を採用しません。現在の価格スナップショットは
+**月額 $25** からで、**20 million requests**、**60 million CPU-ms**、
+**1,000 scripts** を含みます。dispatch lifecycle、tenant script、compute isolation
+を追加しても、この static-file 設計に必要な storage-key / authorization isolation
+は改善しません。
+
+customer が executable code を deploy できるようになるか、tenant 固有の runtime
+binding / limit が必要になった場合に限り、Workers for Platforms を再検討します。
+それまでは、immutable artifact を扱う単一の least-privilege responder の方が、
+security と operations の境界を小さく保てます。
+
+## Deployment prerequisites
+
+production には 2 つの registrable domain が必要です。`zudo-ez-host.app` は
+authenticated control plane と marketing 専用です。public site は次を使用します。
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+launch 前に human owner が、利用可能な public-content domain を選び、初年度と
+更新時の価格を確認し、承認して購入し、renewal ownership と recovery を記録する
+必要があります。同じ管理された購入前提条件が `zudo-ez-host.app` にも適用されます。
+両 registration で registrar lock、DNSSEC、auto-renew、verified contact、monitored
+billing、expiry alert を有効にします。選択した content domain を environment
+configuration に記録し、launch 前に例の placeholder を置き換えます。
+
+production readiness には、上記の wildcard DNS record、Worker route、one-label
+certificate の各確認と HTTPS smoke test も必要です。`.app` は HSTS preload 対象の
+ため、DNS または TLS が未完成な間に利用できる HTTP fallback はありません。local
+development では `localhost` を使用します。

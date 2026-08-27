@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "valid": [
+    {
+      "id": "handle-mixed-case",
+      "operation": "validateHandle",
+      "args": ["MiXeD-Handle9"],
+      "expected": { "ok": true, "value": "mixed-handle9" }
+    },
+    {
+      "id": "handle-minimum-length",
+      "operation": "validateHandle",
+      "args": ["abc"],
+      "expected": { "ok": true, "value": "abc" }
+    },
+    {
+      "id": "handle-maximum-length",
+      "operation": "validateHandle",
+      "args": ["hhhhhhhhhhhhhhhhhhhh"],
+      "expected": { "ok": true, "value": "hhhhhhhhhhhhhhhhhhhh" }
+    },
+    {
+      "id": "slug-mixed-case",
+      "operation": "validateSlug",
+      "args": ["My-Project7"],
+      "expected": { "ok": true, "value": "my-project7" }
+    },
+    {
+      "id": "slug-minimum-length",
+      "operation": "validateSlug",
+      "args": ["p"],
+      "expected": { "ok": true, "value": "p" }
+    },
+    {
+      "id": "slug-maximum-length",
+      "operation": "validateSlug",
+      "args": ["sssssssssssssssssssssssssssssssssssssssss"],
+      "expected": { "ok": true, "value": "sssssssssssssssssssssssssssssssssssssssss" }
+    },
+    {
+      "id": "label-exactly-63-octets",
+      "operation": "parseLabel",
+      "args": ["sssssssssssssssssssssssssssssssssssssssss--hhhhhhhhhhhhhhhhhhhh"],
+      "expected": {
+        "ok": true,
+        "value": {
+          "slug": "sssssssssssssssssssssssssssssssssssssssss",
+          "handle": "hhhhhhhhhhhhhhhhhhhh"
+        }
+      }
+    },
+    {
+      "id": "compose-canonical-label",
+      "operation": "composeLabel",
+      "args": ["My-Project7", "MiXeD-Handle9"],
+      "expected": { "ok": true, "value": "my-project7--mixed-handle9" }
+    },
+    {
+      "id": "parse-canonical-label",
+      "operation": "parseLabel",
+      "args": ["My-Project7--MiXeD-Handle9"],
+      "expected": {
+        "ok": true,
+        "value": { "slug": "my-project7", "handle": "mixed-handle9" }
+      }
+    },
+    {
+      "id": "custom-permanent-id-prefix",
+      "operation": "validateHandle",
+      "args": ["acct-abc"],
+      "options": { "permanentIdPrefixes": ["acct-"] },
+      "expected": { "ok": false, "reason": "reserved_prefix" }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "handle-one-under-minimum",
+      "operation": "validateHandle",
+      "args": ["ab"],
+      "expected": { "ok": false, "reason": "too_short" }
+    },
+    {
+      "id": "handle-one-over-maximum",
+      "operation": "validateHandle",
+      "args": ["hhhhhhhhhhhhhhhhhhhhh"],
+      "expected": { "ok": false, "reason": "too_long" }
+    },
+    {
+      "id": "slug-empty",
+      "operation": "validateSlug",
+      "args": [""],
+      "expected": { "ok": false, "reason": "empty" }
+    },
+    {
+      "id": "slug-one-over-maximum",
+      "operation": "validateSlug",
+      "args": ["ssssssssssssssssssssssssssssssssssssssssss"],
+      "expected": { "ok": false, "reason": "too_long" }
+    },
+    {
+      "id": "non-ascii-handle",
+      "operation": "validateHandle",
+      "args": ["café"],
+      "expected": { "ok": false, "reason": "invalid_character" }
+    },
+    {
+      "id": "leading-hyphen",
+      "operation": "validateHandle",
+      "args": ["-abc"],
+      "expected": { "ok": false, "reason": "leading_hyphen" }
+    },
+    {
+      "id": "trailing-hyphen",
+      "operation": "validateSlug",
+      "args": ["project-"],
+      "expected": { "ok": false, "reason": "trailing_hyphen" }
+    },
+    {
+      "id": "embedded-delimiter-in-handle",
+      "operation": "validateHandle",
+      "args": ["abc--def"],
+      "expected": { "ok": false, "reason": "contains_delimiter" }
+    },
+    {
+      "id": "embedded-delimiter-in-slug",
+      "operation": "validateSlug",
+      "args": ["project--blue"],
+      "expected": { "ok": false, "reason": "contains_delimiter" }
+    },
+    {
+      "id": "punycode-handle",
+      "operation": "validateHandle",
+      "args": ["xn--abc"],
+      "expected": { "ok": false, "reason": "punycode_prefix" }
+    },
+    {
+      "id": "punycode-slug",
+      "operation": "validateSlug",
+      "args": ["xn--project"],
+      "expected": { "ok": false, "reason": "punycode_prefix" }
+    },
+    {
+      "id": "reserved-handle-case-insensitive",
+      "operation": "validateHandle",
+      "args": ["WWW"],
+      "expected": { "ok": false, "reason": "reserved_name" }
+    },
+    {
+      "id": "reserved-slug",
+      "operation": "validateSlug",
+      "args": ["api"],
+      "expected": { "ok": false, "reason": "reserved_name" }
+    },
+    {
+      "id": "label-one-over-63-octets",
+      "operation": "parseLabel",
+      "args": ["sssssssssssssssssssssssssssssssssssssssss--hhhhhhhhhhhhhhhhhhhhh"],
+      "expected": { "ok": false, "reason": "label_too_long" }
+    },
+    {
+      "id": "label-missing-delimiter",
+      "operation": "parseLabel",
+      "args": ["projectabc"],
+      "expected": { "ok": false, "reason": "missing_delimiter" }
+    },
+    {
+      "id": "label-with-second-delimiter",
+      "operation": "parseLabel",
+      "args": ["project--abc--def"],
+      "expected": { "ok": false, "reason": "contains_delimiter" }
+    },
+    {
+      "id": "no-trimming",
+      "operation": "validateHandle",
+      "args": [" abc"],
+      "expected": { "ok": false, "reason": "invalid_character" }
+    }
+  ]
+}

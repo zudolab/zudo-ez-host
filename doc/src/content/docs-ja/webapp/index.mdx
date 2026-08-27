@@ -43,11 +43,12 @@ byte が upload 済みであっても、未公開または失敗した attempt �
 
 ## プロジェクト詳細と設定
 
-プロジェクト詳細では canonical URL と現在の状態を再掲し、更新状況の診断に必要な
-最新 publication と machine attribution を示します。publication lifecycle で定義された
-retry guidance、deletion/takedown、そのマイルストーンで UI が有効になった場合の
-rollback などを表示できます。破壊的操作には明示的な確認が必要であり、ローカルファイル
-まで削除されるかのように示してはなりません。
+プロジェクト詳細では canonical URL と live、unpublished、error のいずれかの状態を
+再掲します。更新状況の診断に必要な、成功した最新の publication time、publishing
+machine-name snapshot、対応可能な sync/gate status を示します。publication lifecycle
+で定義された retry guidance、deletion/takedown、そのマイルストーンで UI が有効になった
+場合の rollback などを表示できます。破壊的操作には明示的な確認が必要であり、ローカル
+ファイルまで削除されるかのように示してはなりません。
 
 設定に表示するのは、architecture で採用済みの次の control だけです。
 

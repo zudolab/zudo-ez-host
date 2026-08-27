@@ -1,0 +1,47 @@
+---
+title: zudo-ez-host documentation
+description: Publish directories from a Mac as independent static sites.
+sidebar_position: 1
+---
+
+## zudo-ez-host in one minute
+
+zudo-ez-host turns directories on your Mac into hosted static sites. Choose a
+sync root in the Mac menubar app, then place each site in its own immediate
+child directory. Each child directory is one **project** and one independently
+hosted site. The app watches those local projects and publishes changes
+automatically.
+
+The model resembles a Dropbox public folder, but it is intentionally one-way:
+the local directory is the source of truth. zudo-ez-host publishes its contents;
+it does not download remote edits or synchronize a cloud filesystem back to the
+Mac.
+
+[Get started with the directory model](./getting-started).
+
+## Start with the concepts
+
+The [concepts guide](./concepts) defines the sync root, projects,
+publications, named machines, and the split between the control plane and
+public sites. The public URL for a project has this canonical shape:
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+`<public-content-domain>` is a separately purchased domain for untrusted public
+content. It is not `zudo-ez-host.app`, which is reserved for the authenticated
+control surface and marketing site.
+
+For the system behind that model, see [hosting and security](./hosting),
+[sync and the Mac client](./sync), and [the webapp and accounts](./webapp).
+
+## Where the roadmap goes
+
+The first milestone is a personal MVP for one invited account and one or more
+named Macs. The next milestone grows that foundation into a multi-user service.
+Commercial plans, broader administration, and a possible Mac App Store release
+belong to the third milestone; they are not shipped M1 features.
+
+See the [milestone breakdown and glossary](./concepts#milestones) for the
+precise boundary.

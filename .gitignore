@@ -3,6 +3,7 @@ dist/
 .zfb/
 .zfb-build/
 .wrangler/
+.vitest/
 worktrees/
 test-results/
 playwright-report/

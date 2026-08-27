@@ -54,3 +54,4 @@ export type {
 } from "./manifest/index.js";
 export * from "./serving/index.js";
 export * from "./machine-token/index.js";
+export type { PublicationResolution, PublicationServingFlags } from "./resolution/index.js";

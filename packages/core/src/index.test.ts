@@ -18,8 +18,19 @@ import {
   generateMachineToken,
   parseMachineToken,
 } from "./index.js";
+import type { PublicationResolution } from "./index.js";
 
 describe("@zudo-ez-host/core", () => {
+  it("exports the publication resolution contract", () => {
+    const resolution: PublicationResolution = {
+      projectId: "project-fixture",
+      artifactHash: "sha256:fixture",
+      servingFlags: { spaFallback: true, gated: false },
+    };
+
+    expect(resolution.servingFlags).toEqual({ spaFallback: true, gated: false });
+  });
+
   it("executes in the root test lane", () => {
     expect({
       MAX_FILE_BYTES,

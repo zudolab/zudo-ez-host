@@ -104,14 +104,35 @@ describe("exact control origins", () => {
       expect(response.headers.get("cache-control")).toBe("no-store");
       await expect(response.json()).resolves.toEqual({ error: "invalid_origin" });
     }
+
+    const desktopForm = new URLSearchParams({
+      redirect_uri: "http://127.0.0.1:49152/callback",
+      code_challenge: "a".repeat(43),
+      code_challenge_method: "S256",
+      scope: "publish",
+      state: "origin-test-state",
+      machine_name: "Origin Mac",
+    });
+    const rejectedDesktopMutation = await app.request(
+      `${BASE_URL}/desktop/authorize`,
+      {
+        method: "POST",
+        headers: { cookie, origin: "https://evil.test" },
+        body: desktopForm,
+      },
+      authEnv,
+    );
+    expect(rejectedDesktopMutation.status).toBe(403);
+    expect(rejectedDesktopMutation.headers.get("cache-control")).toBe("no-store");
+    await expect(rejectedDesktopMutation.json()).resolves.toEqual({ error: "invalid_origin" });
   });
 
-  it("mounts all skeletons with their intended session boundary", async () => {
+  it("keeps account and machine session mounts while desktop authorization owns login return", async () => {
     const authEnv = runtimeEnv();
     const cookie = await sessionCookie(authEnv);
     const app = createControlApp();
 
-    for (const path of ["/api/account", "/api/machines", "/desktop/authorize"]) {
+    for (const path of ["/api/account", "/api/machines"]) {
       const anonymous = await app.request(`${BASE_URL}${path}`, {}, authEnv);
       expect(anonymous.status, path).toBe(401);
       await expect(anonymous.json()).resolves.toEqual({
@@ -123,6 +144,29 @@ describe("exact control origins", () => {
       await expect(safe.json()).resolves.toEqual({ error: "route_not_implemented" });
     }
 
+    const desktopParameters = new URLSearchParams({
+      redirect_uri: "http://127.0.0.1:49152/callback",
+      code_challenge: "a".repeat(43),
+      code_challenge_method: "S256",
+      scope: "publish",
+      state: "origin-test-state",
+      machine_name: "Origin Mac",
+    });
+    const anonymousDesktop = await app.request(
+      `${BASE_URL}/desktop/authorize?${desktopParameters}`,
+      {},
+      authEnv,
+    );
+    expect(anonymousDesktop.status).toBe(302);
+    expect(anonymousDesktop.headers.get("location")).toContain("/login?returnTo=");
+    const sessionDesktop = await app.request(
+      `${BASE_URL}/desktop/authorize?${desktopParameters}`,
+      { headers: { cookie } },
+      authEnv,
+    );
+    expect(sessionDesktop.status).toBe(200);
+    expect(sessionDesktop.headers.get("content-type")).toContain("text/html");
+
     const anonymousToken = await app.request(`${BASE_URL}/desktop/token`, {}, authEnv);
     const cookieToken = await app.request(
       `${BASE_URL}/desktop/token`,
@@ -130,6 +174,8 @@ describe("exact control origins", () => {
       authEnv,
     );
     expect(cookieToken.status).toBe(anonymousToken.status);
+    expect(cookieToken.headers.get("cache-control")).toBe("no-store");
+    expect(anonymousToken.headers.get("cache-control")).toBe("no-store");
     await expect(cookieToken.json()).resolves.toEqual(await anonymousToken.json());
   });
 

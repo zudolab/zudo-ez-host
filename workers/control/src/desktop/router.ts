@@ -9,6 +9,7 @@ import {
 import { generateAuthorizationCode, hashAuthorizationCode } from "./codes.js";
 import { desktopConsentPageResponse } from "./consent-page.js";
 import { insertDesktopAuthorizationCode } from "./queries.js";
+import { exchangeDesktopToken } from "./token.js";
 
 const CODE_LIFETIME_MS = 60_000;
 
@@ -83,6 +84,8 @@ desktopRouter.post("/authorize", async (context) => {
     throw error;
   }
 });
+
+desktopRouter.post("/token", (context) => exchangeDesktopToken(context.req.raw, context.env.DB));
 
 desktopRouter.all("*", (context) =>
   context.json({ error: "route_not_implemented" }, 404, { "Cache-Control": "no-store" }),

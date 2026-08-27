@@ -103,15 +103,15 @@ Worker-mediated streaming is simpler for very small payloads and keeps all polic
 
 Set conservative v1 product limits, deliberately far below R2's platform maximum:
 
-| Limit | Proposed v1 value |
-| --- | ---: |
-| One file | 100 MiB |
-| One project/artifact | 20,000 files and 2 GiB |
-| Active published data per account | 10 GiB |
+| Limit                                          |                    Proposed v1 value |
+| ---------------------------------------------- | -----------------------------------: |
+| One file                                       |                              100 MiB |
+| One project/artifact                           |               20,000 files and 2 GiB |
+| Active published data per account              |                               10 GiB |
 | Retained plus staged physical data per account | 20 GiB before GC/cleanup is required |
-| Canonical manifest body | 10 MiB |
-| Open publication attempts | 3 per project, 20 per account |
-| Client upload concurrency | 8 PUTs per machine |
+| Canonical manifest body                        |                               10 MiB |
+| Open publication attempts                      |        3 per project, 20 per account |
+| Client upload concurrency                      |                   8 PUTs per machine |
 
 These are product safeguards, not R2 limits. Current [R2 limits](https://developers.cloudflare.com/r2/platform/limits/) allow a 5 GiB single-part object and 5 TiB object overall; [multipart uploads](https://developers.cloudflare.com/r2/objects/multipart-objects/) allow up to 10,000 parts, with 5 MiB minimum non-final parts and automatic abort after 7 days by default. Because v1 rejects files above 100 MiB, it can ship without multipart. If the product later raises that limit, use R2 multipart above 100 MiB: the Worker creates the multipart upload, signs individual part PUTs, records/reserves the expected total, completes it only after validation, and explicitly aborts abandoned attempts in addition to an R2 lifecycle rule.
 

@@ -23,7 +23,7 @@ Do not add product code, Workers, or a `wrangler.toml` during the repository boo
 - `pnpm typecheck` runs strict TypeScript checking.
 - `pnpm build` delegates builds to workspace packages when they exist.
 - `pnpm test` runs the fast Vitest unit-test lane and passes when no tests exist yet.
-- `pnpm verify` and `pnpm b4push` run the collected-failure gate: frozen install, format check, lint, typecheck, and build.
+- `pnpm verify` and `pnpm b4push` run the collected-failure gate: frozen install, format check, lint, typecheck, build, documentation i18n parity, and internal-link checks.
 - `pnpm init-worktree` installs the direct hook guard in a fresh worktree.
 
 The local gate intentionally does not run heavy browser suites. Run a held-open development server only when the task explicitly requires interactive work.
@@ -39,7 +39,7 @@ The `prepare` lifecycle script installs lefthook and then installs `.git/hooks/p
 - `.github/workflows/` — CI and workflow linting.
 - `packages/*` — first-party libraries added by later implementation work.
 - `workers/*` — deployable Workers added by later implementation work.
-- `doc/` — the `zudo-doc` documentation site added by later implementation work.
+- `doc/` — the scaffolded `zudo-doc` documentation site and its bilingual content.
 - `scripts/` — repository automation and git hooks.
 - `worktrees/` — local agent worktrees; ignored and never committed.
 
@@ -58,7 +58,7 @@ Choose the smallest level that can observe the behavior under test. Unit tests c
 
 ## CSS conventions
 
-Consult the `/css-wisdom` skill before writing or reviewing non-trivial CSS. The project will use Tailwind v4 with three-tier primitive→semantic→component tokens, enforced by `zudo-design-token-lint`. Color tokens will be ported from zudo-text's `packages/color-themes`; see `docs/research/prior-art.md` once it exists.
+Consult the `/css-wisdom` skill before writing or reviewing non-trivial CSS. The project will use Tailwind v4 with three-tier primitive→semantic→component tokens, enforced by `zudo-design-token-lint`. Color tokens will be ported from zudo-text's `packages/color-themes`; see `docs/research/prior-art.md` for the recorded prior-art research.
 
 When components are available, use the component-first approach and compose Tailwind utilities in the component. Do not introduce raw palette or spacing literals when a project token exists.
 

@@ -4,7 +4,7 @@ zudo-ez-host is a Dropbox-public-folder-like hosting system whose Mac menubar ap
 
 ## Status
 
-This repository is in the pre-implementation bootstrap and specification phase. Product packages, Workers, and the documentation site will arrive in later work.
+This repository is in the pre-implementation bootstrap and specification phase. Product packages and Workers will arrive in later work; the bilingual documentation site is scaffolded under [`doc/`](doc/).
 
 ## Development
 
@@ -16,4 +16,4 @@ pnpm verify
 pnpm b4push
 ```
 
-The documentation site will live in [`doc/`](doc/) once it is added. The implementation plan is tracked in [epic #2](https://github.com/zudolab/zudo-ez-host/issues/2).
+The bilingual documentation site is in [`doc/`](doc/). The implementation plan is tracked in [epic #2](https://github.com/zudolab/zudo-ez-host/issues/2).

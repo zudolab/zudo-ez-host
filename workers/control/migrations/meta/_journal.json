@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1787824717375,
+      "tag": "0000_curved_solo",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787824718889,
+      "tag": "0001_immutable-invariants",
+      "breakpoints": true
+    }
+  ]
+}

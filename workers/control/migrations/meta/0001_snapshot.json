@@ -1,0 +1,1077 @@
+{
+  "id": "6ba194b4-3b2d-4df1-882f-46c632bf2439",
+  "prevId": "49bb010f-3a5b-4d81-b2b5-2a22343d59ff",
+  "version": "6",
+  "dialect": "sqlite",
+  "tables": {
+    "hostname_allocations": {
+      "name": "hostname_allocations",
+      "columns": {
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "hostname_allocations_project_id_unique": {
+          "name": "hostname_allocations_project_id_unique",
+          "columns": ["project_id"],
+          "isUnique": true
+        },
+        "hostname_allocations_user_id_idx": {
+          "name": "hostname_allocations_user_id_idx",
+          "columns": ["user_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "hostname_allocations_user_id_user_id_fk": {
+          "name": "hostname_allocations_user_id_user_id_fk",
+          "tableFrom": "hostname_allocations",
+          "columnsFrom": ["user_id"],
+          "tableTo": "user",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "hostname_allocations_project_id_projects_id_fk": {
+          "name": "hostname_allocations_project_id_projects_id_fk",
+          "tableFrom": "hostname_allocations",
+          "columnsFrom": ["project_id"],
+          "tableTo": "projects",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "hostname_allocations_project_owner_fk": {
+          "name": "hostname_allocations_project_owner_fk",
+          "tableFrom": "hostname_allocations",
+          "columnsFrom": ["project_id", "user_id"],
+          "tableTo": "projects",
+          "columnsTo": ["id", "user_id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "hostname_allocations_label_length": {
+          "name": "hostname_allocations_label_length",
+          "value": "length(\"hostname_allocations\".\"label\") between 6 and 63"
+        }
+      }
+    },
+    "machines": {
+      "name": "machines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "credential_hash_sha256": {
+          "name": "credential_hash_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "credential_prefix": {
+          "name": "credential_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "credential_version": {
+          "name": "credential_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked": {
+          "name": "revoked",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "machines_credential_hash_sha256_unique": {
+          "name": "machines_credential_hash_sha256_unique",
+          "columns": ["credential_hash_sha256"],
+          "isUnique": true
+        },
+        "machines_id_user_id_unique": {
+          "name": "machines_id_user_id_unique",
+          "columns": ["id", "user_id"],
+          "isUnique": true
+        },
+        "machines_user_id_idx": {
+          "name": "machines_user_id_idx",
+          "columns": ["user_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "machines_user_id_user_id_fk": {
+          "name": "machines_user_id_user_id_fk",
+          "tableFrom": "machines",
+          "columnsFrom": ["user_id"],
+          "tableTo": "user",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "machines_name_not_empty": {
+          "name": "machines_name_not_empty",
+          "value": "length(\"machines\".\"name\") between 1 and 100"
+        },
+        "machines_credential_version_positive": {
+          "name": "machines_credential_version_positive",
+          "value": "\"machines\".\"credential_version\" > 0"
+        },
+        "machines_lifetime": {
+          "name": "machines_lifetime",
+          "value": "\"machines\".\"expires_at\" > \"machines\".\"created_at\""
+        },
+        "machines_one_year_max_lifetime": {
+          "name": "machines_one_year_max_lifetime",
+          "value": "\"machines\".\"expires_at\" <= \"machines\".\"created_at\" + 31536000000"
+        }
+      }
+    },
+    "project_heads": {
+      "name": "project_heads",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "publication_id": {
+          "name": "publication_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "project_heads_publication_id_unique": {
+          "name": "project_heads_publication_id_unique",
+          "columns": ["publication_id"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "project_heads_project_id_projects_id_fk": {
+          "name": "project_heads_project_id_projects_id_fk",
+          "tableFrom": "project_heads",
+          "columnsFrom": ["project_id"],
+          "tableTo": "projects",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "project_heads_publication_id_publications_id_fk": {
+          "name": "project_heads_publication_id_publications_id_fk",
+          "tableFrom": "project_heads",
+          "columnsFrom": ["publication_id"],
+          "tableTo": "publications",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "project_heads_publication_project_fk": {
+          "name": "project_heads_publication_project_fk",
+          "tableFrom": "project_heads",
+          "columnsFrom": ["publication_id", "project_id"],
+          "tableTo": "publications",
+          "columnsTo": ["id", "project_id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "project_heads_generation_non_negative": {
+          "name": "project_heads_generation_non_negative",
+          "value": "\"project_heads\".\"generation\" >= 0"
+        },
+        "project_heads_publication_generation_pair": {
+          "name": "project_heads_publication_generation_pair",
+          "value": "(\"project_heads\".\"generation\" = 0 and \"project_heads\".\"publication_id\" is null) or (\"project_heads\".\"generation\" > 0 and \"project_heads\".\"publication_id\" is not null)"
+        }
+      }
+    },
+    "projects": {
+      "name": "projects",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "projects_user_slug_unique": {
+          "name": "projects_user_slug_unique",
+          "columns": ["user_id", "slug"],
+          "isUnique": true
+        },
+        "projects_id_user_id_unique": {
+          "name": "projects_id_user_id_unique",
+          "columns": ["id", "user_id"],
+          "isUnique": true
+        },
+        "projects_user_id_idx": {
+          "name": "projects_user_id_idx",
+          "columns": ["user_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "projects_user_id_user_id_fk": {
+          "name": "projects_user_id_user_id_fk",
+          "tableFrom": "projects",
+          "columnsFrom": ["user_id"],
+          "tableTo": "user",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "projects_slug_length": {
+          "name": "projects_slug_length",
+          "value": "length(\"projects\".\"slug\") between 1 and 41"
+        },
+        "projects_display_name_not_empty": {
+          "name": "projects_display_name_not_empty",
+          "value": "length(\"projects\".\"display_name\") between 1 and 100"
+        },
+        "projects_status_valid": {
+          "name": "projects_status_valid",
+          "value": "\"projects\".\"status\" in ('active', 'taken_down')"
+        }
+      }
+    },
+    "publication_attempt_objects": {
+      "name": "publication_attempt_objects",
+      "columns": {
+        "attempt_id": {
+          "name": "attempt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requires_upload": {
+          "name": "requires_upload",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verified": {
+          "name": "verified",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "publication_attempt_objects_attempt_id_publication_attempts_id_fk": {
+          "name": "publication_attempt_objects_attempt_id_publication_attempts_id_fk",
+          "tableFrom": "publication_attempt_objects",
+          "columnsFrom": ["attempt_id"],
+          "tableTo": "publication_attempts",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "publication_attempt_objects_attempt_id_content_hash_pk": {
+          "columns": ["attempt_id", "content_hash"],
+          "name": "publication_attempt_objects_attempt_id_content_hash_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "publication_attempt_objects_size_bytes_non_negative": {
+          "name": "publication_attempt_objects_size_bytes_non_negative",
+          "value": "\"publication_attempt_objects\".\"size_bytes\" >= 0"
+        },
+        "publication_attempt_objects_reuse_verified": {
+          "name": "publication_attempt_objects_reuse_verified",
+          "value": "\"publication_attempt_objects\".\"requires_upload\" = 1 or \"publication_attempt_objects\".\"verified\" = 1"
+        }
+      }
+    },
+    "publication_attempts": {
+      "name": "publication_attempts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "machine_id": {
+          "name": "machine_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "base_generation": {
+          "name": "base_generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "base_logical_bytes": {
+          "name": "base_logical_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "staged_manifest_r2_key": {
+          "name": "staged_manifest_r2_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "manifest_hash": {
+          "name": "manifest_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "logical_bytes": {
+          "name": "logical_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_count": {
+          "name": "file_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reserved_active_delta_bytes": {
+          "name": "reserved_active_delta_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reserved_physical_upload_bytes": {
+          "name": "reserved_physical_upload_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "publication_attempts_project_state_idx": {
+          "name": "publication_attempts_project_state_idx",
+          "columns": ["project_id", "state"],
+          "isUnique": false
+        },
+        "publication_attempts_user_state_idx": {
+          "name": "publication_attempts_user_state_idx",
+          "columns": ["user_id", "state"],
+          "isUnique": false
+        },
+        "publication_attempts_machine_id_idx": {
+          "name": "publication_attempts_machine_id_idx",
+          "columns": ["machine_id"],
+          "isUnique": false
+        },
+        "publication_attempts_identity_unique": {
+          "name": "publication_attempts_identity_unique",
+          "columns": ["id", "project_id", "machine_id"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "publication_attempts_project_id_projects_id_fk": {
+          "name": "publication_attempts_project_id_projects_id_fk",
+          "tableFrom": "publication_attempts",
+          "columnsFrom": ["project_id"],
+          "tableTo": "projects",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "publication_attempts_user_id_user_id_fk": {
+          "name": "publication_attempts_user_id_user_id_fk",
+          "tableFrom": "publication_attempts",
+          "columnsFrom": ["user_id"],
+          "tableTo": "user",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "publication_attempts_machine_id_machines_id_fk": {
+          "name": "publication_attempts_machine_id_machines_id_fk",
+          "tableFrom": "publication_attempts",
+          "columnsFrom": ["machine_id"],
+          "tableTo": "machines",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "publication_attempts_project_owner_fk": {
+          "name": "publication_attempts_project_owner_fk",
+          "tableFrom": "publication_attempts",
+          "columnsFrom": ["project_id", "user_id"],
+          "tableTo": "projects",
+          "columnsTo": ["id", "user_id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "publication_attempts_machine_owner_fk": {
+          "name": "publication_attempts_machine_owner_fk",
+          "tableFrom": "publication_attempts",
+          "columnsFrom": ["machine_id", "user_id"],
+          "tableTo": "machines",
+          "columnsTo": ["id", "user_id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "publication_attempts_state_valid": {
+          "name": "publication_attempts_state_valid",
+          "value": "\"publication_attempts\".\"state\" in ('open', 'expired', 'committed', 'abandoned')"
+        },
+        "publication_attempts_base_generation_non_negative": {
+          "name": "publication_attempts_base_generation_non_negative",
+          "value": "\"publication_attempts\".\"base_generation\" >= 0"
+        },
+        "publication_attempts_base_logical_bytes_non_negative": {
+          "name": "publication_attempts_base_logical_bytes_non_negative",
+          "value": "\"publication_attempts\".\"base_logical_bytes\" >= 0"
+        },
+        "publication_attempts_logical_bytes_non_negative": {
+          "name": "publication_attempts_logical_bytes_non_negative",
+          "value": "\"publication_attempts\".\"logical_bytes\" >= 0"
+        },
+        "publication_attempts_file_count_non_negative": {
+          "name": "publication_attempts_file_count_non_negative",
+          "value": "\"publication_attempts\".\"file_count\" >= 0"
+        },
+        "publication_attempts_reserved_active_delta_non_negative": {
+          "name": "publication_attempts_reserved_active_delta_non_negative",
+          "value": "\"publication_attempts\".\"reserved_active_delta_bytes\" >= 0"
+        },
+        "publication_attempts_reserved_physical_upload_non_negative": {
+          "name": "publication_attempts_reserved_physical_upload_non_negative",
+          "value": "\"publication_attempts\".\"reserved_physical_upload_bytes\" >= 0"
+        },
+        "publication_attempts_expiry": {
+          "name": "publication_attempts_expiry",
+          "value": "\"publication_attempts\".\"expires_at\" > \"publication_attempts\".\"created_at\""
+        },
+        "publication_attempts_settlement": {
+          "name": "publication_attempts_settlement",
+          "value": "(\"publication_attempts\".\"state\" = 'open' and \"publication_attempts\".\"settled_at\" is null) or (\"publication_attempts\".\"state\" <> 'open' and \"publication_attempts\".\"settled_at\" is not null)"
+        }
+      }
+    },
+    "publication_objects": {
+      "name": "publication_objects",
+      "columns": {
+        "publication_id": {
+          "name": "publication_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "publication_objects_publication_id_publications_id_fk": {
+          "name": "publication_objects_publication_id_publications_id_fk",
+          "tableFrom": "publication_objects",
+          "columnsFrom": ["publication_id"],
+          "tableTo": "publications",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "publication_objects_publication_id_content_hash_pk": {
+          "columns": ["publication_id", "content_hash"],
+          "name": "publication_objects_publication_id_content_hash_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "publication_objects_size_bytes_non_negative": {
+          "name": "publication_objects_size_bytes_non_negative",
+          "value": "\"publication_objects\".\"size_bytes\" >= 0"
+        }
+      }
+    },
+    "publications": {
+      "name": "publications",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempt_id": {
+          "name": "attempt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "artifact_hash": {
+          "name": "artifact_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "machine_id": {
+          "name": "machine_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "machine_name_snapshot": {
+          "name": "machine_name_snapshot",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "logical_bytes": {
+          "name": "logical_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "physical_bytes": {
+          "name": "physical_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_count": {
+          "name": "file_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "object_count": {
+          "name": "object_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "publications_attempt_id_unique": {
+          "name": "publications_attempt_id_unique",
+          "columns": ["attempt_id"],
+          "isUnique": true
+        },
+        "publications_id_project_id_unique": {
+          "name": "publications_id_project_id_unique",
+          "columns": ["id", "project_id"],
+          "isUnique": true
+        },
+        "publications_project_generation_unique": {
+          "name": "publications_project_generation_unique",
+          "columns": ["project_id", "generation"],
+          "isUnique": true
+        },
+        "publications_project_published_at_idx": {
+          "name": "publications_project_published_at_idx",
+          "columns": ["project_id", "published_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "publications_project_id_projects_id_fk": {
+          "name": "publications_project_id_projects_id_fk",
+          "tableFrom": "publications",
+          "columnsFrom": ["project_id"],
+          "tableTo": "projects",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "publications_attempt_id_publication_attempts_id_fk": {
+          "name": "publications_attempt_id_publication_attempts_id_fk",
+          "tableFrom": "publications",
+          "columnsFrom": ["attempt_id"],
+          "tableTo": "publication_attempts",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "publications_machine_id_machines_id_fk": {
+          "name": "publications_machine_id_machines_id_fk",
+          "tableFrom": "publications",
+          "columnsFrom": ["machine_id"],
+          "tableTo": "machines",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "publications_attempt_identity_fk": {
+          "name": "publications_attempt_identity_fk",
+          "tableFrom": "publications",
+          "columnsFrom": ["attempt_id", "project_id", "machine_id"],
+          "tableTo": "publication_attempts",
+          "columnsTo": ["id", "project_id", "machine_id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "publications_generation_positive": {
+          "name": "publications_generation_positive",
+          "value": "\"publications\".\"generation\" > 0"
+        },
+        "publications_logical_bytes_non_negative": {
+          "name": "publications_logical_bytes_non_negative",
+          "value": "\"publications\".\"logical_bytes\" >= 0"
+        },
+        "publications_physical_bytes_non_negative": {
+          "name": "publications_physical_bytes_non_negative",
+          "value": "\"publications\".\"physical_bytes\" >= 0"
+        },
+        "publications_file_count_non_negative": {
+          "name": "publications_file_count_non_negative",
+          "value": "\"publications\".\"file_count\" >= 0"
+        },
+        "publications_object_count_non_negative": {
+          "name": "publications_object_count_non_negative",
+          "value": "\"publications\".\"object_count\" >= 0"
+        },
+        "publications_machine_name_snapshot_not_empty": {
+          "name": "publications_machine_name_snapshot_not_empty",
+          "value": "length(\"publications\".\"machine_name_snapshot\") between 1 and 100"
+        }
+      }
+    },
+    "user": {
+      "name": "user",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "canonical_handle": {
+          "name": "canonical_handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active_logical_bytes": {
+          "name": "active_logical_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "reserved_active_delta_bytes": {
+          "name": "reserved_active_delta_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "retained_staged_physical_bytes": {
+          "name": "retained_staged_physical_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "reserved_physical_upload_bytes": {
+          "name": "reserved_physical_upload_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "user_canonical_handle_unique": {
+          "name": "user_canonical_handle_unique",
+          "columns": ["canonical_handle"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "user_canonical_handle_length": {
+          "name": "user_canonical_handle_length",
+          "value": "length(\"user\".\"canonical_handle\") between 3 and 20"
+        },
+        "user_active_logical_bytes_non_negative": {
+          "name": "user_active_logical_bytes_non_negative",
+          "value": "\"user\".\"active_logical_bytes\" >= 0"
+        },
+        "user_reserved_active_delta_bytes_non_negative": {
+          "name": "user_reserved_active_delta_bytes_non_negative",
+          "value": "\"user\".\"reserved_active_delta_bytes\" >= 0"
+        },
+        "user_retained_staged_physical_bytes_non_negative": {
+          "name": "user_retained_staged_physical_bytes_non_negative",
+          "value": "\"user\".\"retained_staged_physical_bytes\" >= 0"
+        },
+        "user_reserved_physical_upload_bytes_non_negative": {
+          "name": "user_reserved_physical_upload_bytes_non_negative",
+          "value": "\"user\".\"reserved_physical_upload_bytes\" >= 0"
+        }
+      }
+    },
+    "verified_objects": {
+      "name": "verified_objects",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "verified_objects_project_id_projects_id_fk": {
+          "name": "verified_objects_project_id_projects_id_fk",
+          "tableFrom": "verified_objects",
+          "columnsFrom": ["project_id"],
+          "tableTo": "projects",
+          "columnsTo": ["id"],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "verified_objects_project_id_content_hash_pk": {
+          "columns": ["project_id", "content_hash"],
+          "name": "verified_objects_project_id_content_hash_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "verified_objects_size_bytes_non_negative": {
+          "name": "verified_objects_size_bytes_non_negative",
+          "value": "\"verified_objects\".\"size_bytes\" >= 0"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

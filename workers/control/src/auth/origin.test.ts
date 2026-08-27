@@ -106,14 +106,22 @@ describe("exact control origins", () => {
     }
   });
 
-  it("allows origin-less safe session GETs and keeps desktop token cookie-free", async () => {
+  it("mounts all skeletons with their intended session boundary", async () => {
     const authEnv = runtimeEnv();
     const cookie = await sessionCookie(authEnv);
     const app = createControlApp();
 
-    const safe = await app.request(`${BASE_URL}/api/machines`, { headers: { cookie } }, authEnv);
-    expect(safe.status).toBe(404);
-    await expect(safe.json()).resolves.toEqual({ error: "route_not_implemented" });
+    for (const path of ["/api/account", "/api/machines", "/desktop/authorize"]) {
+      const anonymous = await app.request(`${BASE_URL}${path}`, {}, authEnv);
+      expect(anonymous.status, path).toBe(401);
+      await expect(anonymous.json()).resolves.toEqual({
+        error: "session_authentication_required",
+      });
+
+      const safe = await app.request(`${BASE_URL}${path}`, { headers: { cookie } }, authEnv);
+      expect(safe.status, path).toBe(404);
+      await expect(safe.json()).resolves.toEqual({ error: "route_not_implemented" });
+    }
 
     const anonymousToken = await app.request(`${BASE_URL}/desktop/token`, {}, authEnv);
     const cookieToken = await app.request(
@@ -142,5 +150,17 @@ describe("exact control origins", () => {
       authEnv,
     );
     expect(unknown.headers.get("access-control-allow-origin")).toBeNull();
+
+    const rejectedMutation = await app.request(
+      `${BASE_URL}/api/auth/sign-in/email`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://evil.test" },
+        body: JSON.stringify({ email: EMAIL, password: "irrelevant" }),
+      },
+      authEnv,
+    );
+    expect(rejectedMutation.status).toBe(403);
+    expect(rejectedMutation.headers.get("access-control-allow-origin")).toBeNull();
   });
 });

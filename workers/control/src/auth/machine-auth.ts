@@ -9,7 +9,7 @@ import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 
 import { createControlDatabase } from "../db/database.js";
-import { getMachineByCredentialHash } from "../db/queries.js";
+import { getMachineByCredentialHash, getUserById } from "../db/queries.js";
 
 /** The Hono context variable containing the authenticated machine owner. */
 export const MACHINE_AUTH_CONTEXT_KEY = "machineAuth" as const;
@@ -110,7 +110,7 @@ function parseAuthorization(request: Request): AuthorizationResult {
  * The token is parsed and hashed in request memory only. The database stores
  * and receives the digest, never the bearer value itself. The returned context
  * intentionally contains no request-owned project, handle, or credential
- * data; all identity fields come from the machine row.
+ * data; all identity fields come from the machine and user rows.
  */
 export async function authenticateMachineToken(
   token: unknown,
@@ -157,10 +157,17 @@ export async function authenticateMachineToken(
     return errorResult("expired_credential");
   }
 
+  const user = await getUserById(database, machine.userId);
+  if (user === undefined) {
+    // The foreign key should make this unreachable. Keep the auth boundary
+    // fail-closed if storage is nevertheless inconsistent.
+    return errorResult("unknown_credential");
+  }
+
   return {
     ok: true,
     value: {
-      userId: machine.userId,
+      userId: user.id,
       machineId: machine.id,
     },
   };

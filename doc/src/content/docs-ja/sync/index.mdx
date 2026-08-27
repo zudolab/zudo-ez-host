@@ -1,0 +1,140 @@
+---
+title: 同期プロトコル
+description: 一方向の manifest protocol、atomic publication、concurrency rule を説明します。
+sidebar_position: 1
+---
+
+## Protocol goals
+
+選択されたローカルの project directory が source of truth です。同期は一方向の
+publication です。client はローカルの完全な結果を記述し、不足している byte を
+upload して、その結果を 1 つの immutable publication として promote します。
+この protocol は remote file の download、編集内容の merge、file 単位の cloud
+trash の伝播を行いません。
+
+Watcher event は authoritative operation ではなく hint です。完全な manifest に
+よって live にする状態が明示され、event の取りこぼしから回復でき、変更のない
+content を hash で再利用できます。完全な新しい artifact が commit されるまで、
+public site は直前の publication を提供し続けます。
+
+## Canonical manifest
+
+client は normalized relative path 順に並べた versioned manifest を送信します。
+各 entry には次の値が含まれます。
+
+- `/` と Unicode NFC を使用した normalized `path`
+- file の SHA-256 hash
+- byte 単位の `size`
+- client の hash cache にだけ使う高精度な local mtime hint
+- deterministic serving のため保持される platform-derived `contentType`
+
+server は content を SHA-256 で比較し、mtime では比較しません。hash 計算時には
+client が file を開き、その後で size と mtime が変化していないことを確認します。
+変化していた場合は mixed snapshot を publish せず、project を dirty にして再度
+scan します。
+
+path には leading slash、empty segment、`.` または `..` segment、NUL、backslash
+を使用できません。scan は malformed path を reject し、portable case-folding または
+Unicode-normalization collision があれば、衝突する両方の local name を報告します。
+symlink は報告され、follow も publish もされません。
+
+hard ignore は `.DS_Store`、`.git/`、`.hg/`、`.svn/`、app metadata です。root の
+`.ezhostignore` で documented gitignore-style rule を追加できますが、hard ignore
+された path は復元できません。`node_modules/` などの directory が暗黙に ignore
+されるわけでもありません。matching とは独立して、V1 の serving policy はすべての
+dot-prefixed path segment を除外します。将来、exact allowlist で安全な
+`.well-known/*` path を許可する可能性はありますが、manifest が serving boundary
+を弱めることはできません。
+
+## Prepare, upload, and commit
+
+publication は 3 phase で進みます。
+
+1. `prepare` が canonical manifest を validate し、quota を reserve して、期限付きの
+   attempt を作成し、現在の `baseGeneration` を取得します。response に含まれるのは、
+   不足している content hash とその upload contract だけです。
+2. client は不足している byte を、immutable かつ project-scoped の
+   content-addressed R2 object に upload します。各 presigned `PUT` は 10 分間有効で、
+   authenticated control Worker が attempt を authorize した後にだけ発行されます。
+   exact key、method、content type、supported MD5 transport checksum を sign し、参照
+   されるすべての object が completeness check を通ると、service は canonical artifact
+   manifest をそれ自身の hash の下に書き込みます。
+3. idempotent な `commit` が attempt を verify し、generation が引き続き
+   `baseGeneration` と等しい場合だけ、D1 project head を atomically に進めます。
+   同じ transaction に artifact hash、stable machine ID、machine-name snapshot、
+   file 数、byte 数、publication time を記録します。
+
+visibility が変化するのは最後の compare-and-swap のときだけです。public responder
+は promoted artifact だけを読むため、upload、retry、abandoned attempt によって
+half-uploaded site や mixed site が公開されることはありません。immutable upload
+または idempotent commit の繰り返しは安全です。
+
+## Deletion and rollback
+
+送信された manifest が次の live site 全体を表します。path の omission は、次に
+promote される publication からその path を除くだけで、service が対応する local file
+を削除することはありません。rename は path layer での remove と add であり、byte が
+同じなら既存の hash を再利用して upload を省略します。
+
+file 単位の cloud trash はありません。promote 済み publication は、site 全体を
+rollback するため暫定 30 日間保持されます。project deletion と長期 retention は、
+sync command ではなく別の lifecycle operation です。
+
+## Multi-machine concurrency
+
+correctness rule は optimistic concurrency です。別の machine が `prepare` 後に head
+を進めた場合、`commit` は新しい generation と publishing machine name を含む
+`409 publication_head_changed` を返します。client は rescan し、その新しい generation
+に対する overwrite を prepare する前に明示的な user confirmation を得る必要が
+あります。silent last-writer-wins は使用しません。
+
+短時間で期限切れになる commit-only lease を使って verification と promotion を
+serialize する場合があります。この lease が file upload 全体にまたがることはなく、
+sleep、disconnect、crash した publisher が upload-length lock を保持し続けることは
+ありません。
+
+commit された各 publication には stable machine ID と publication 時点の machine
+name が stamp されます。machine rename が反映されるのは将来の stamp だけで、過去の
+attribution は変化しません。webapp は各 project と publication に記録された
+publishing machine を表示します。
+
+## Quotas and abuse controls
+
+暫定 V1 limit は、後続の architecture decision で置き換えられるまで必須です。
+
+| Limit                                      |                 V1 value |
+| ------------------------------------------ | -----------------------: |
+| File                                       |                  100 MiB |
+| Project/artifact                           |   20,000 files and 2 GiB |
+| Active published data/account              |                   10 GiB |
+| Retained plus staged physical data/account |                   20 GiB |
+| Canonical manifest body                    |                   10 MiB |
+| Open attempts                              | 3/project and 20/account |
+| Client upload concurrency                  |           8 PUTs/machine |
+
+D1 は quota reservation、byte/file accounting、open-attempt limit を transactionally
+かつ正確に管理します。eventually consistent rate limiting は abuse damping にだけ使い、
+global quota や billing counter には使いません。初期の configurable ceiling は、
+account あたり 1 分間に 5 prepares、project あたり 1 分間に 10 commits、account
+あたり 1 分間に 1,000 presigned-URL issuances です。
+
+1 file が 100 MiB に制限されるため、V1 に multipart upload はありません。promotion
+前に service は object length、supported transport integrity、attempt ownership、
+completeness を verify します。presigned `PUT` は、申告された SHA-256 label と upload
+された byte が一致することを証明しません。server-side SHA-256 recomputation は
+deferred のままであり、transport check が証明するかのように扱ってはいけません。
+
+## Failure recovery
+
+scan が中断した場合や hash 計算中に file が変化した場合、project を dirty にして
+reconciliation をやり直します。期限切れの upload contract は、認証済みでまだ open
+な attempt に限って refresh できます。prepare、upload、commit が失敗しても現在の
+public head は変化しません。到達不能になった immutable staging object は、attempt
+と safety window の期限後に回収できます。
+
+launch、wake、sync-root change、watcher error/overflow、periodic safety pass の際には、
+client が complete scan を実行します。通常の filesystem event には
+[Mac client](/ja/docs/sync/mac-client) で説明する batching behavior を使用します。
+stale commit は前述の明示的な rescan-and-confirm flow に従います。不適切だが正常に
+promote された site の recovery には保持された publication 全体を使い、remote の
+file 単位 merge や trash restoration は行いません。

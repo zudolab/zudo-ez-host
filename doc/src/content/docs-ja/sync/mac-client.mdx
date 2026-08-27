@@ -1,0 +1,110 @@
+---
+title: Mac クライアント
+description: Tauri desktop architecture における filesystem reconciliation と release boundary の仕様です。
+sidebar_position: 2
+---
+
+## Tauri v2 application shape
+
+Mac client は Tauri v2 accessory/menu-bar app です。Rust-owned engine が
+`notify` watcher を event source として使い、scan、hashing、publication、lifecycle
+correctness を管理します。WebView は setup、status、error、account、preferences を
+表示しますが、filesystem state は管理しません。
+
+通常の window は default で hidden ですが、menu bar から開いたときには keyboard と
+VoiceOver で利用できます。window を閉じると app を終了せずに非表示にします。
+watcher を停止して終了するのは、明示的な **Quit** action だけです。
+
+## Root and project discovery
+
+user は native folder picker で 1 つの sync root を選択します。その直下にある各
+directory が 1 つの project かつ hosted site です。root 直下の loose file は ignore
+され、UI がその挙動を明示します。直下の directory の create、rename、delete により
+project inventory が更新され、reconciliation が開始されます。
+
+永続化した root access には、単なる path string ではなく bookmark を基盤とする
+`resolve root -> access guard -> path` abstraction を使います。これにより direct access
+と sandboxed access を同じ boundary の内側に保ちます。symlink は報告され publish
+されません。app state は選択した content tree の外側に保存します。
+
+## Watching and reconciliation
+
+Rust engine は選択された root に対する recursive `notify` watcher を維持します。
+event は影響する project を reconciliation 対象として mark するだけです。通常の
+burst には 500 ms quiet period と 5 second maximum delay を適用します。1 project
+につき実行できる reconciliation は 1 つだけです。実行中に受信した event は dirty
+bit を set し、完了後に 1 回の follow-up scan を開始します。
+
+launch、wake、root change、watcher failure/overflow、periodic safety pass では complete
+scan が correctness boundary です。root permission が変わった場合も access を再度
+resolve し、watcher を再構築します。hash cache には stable local identity、size、
+high-resolution mtime を使えますが、cold scan または ambiguous scan では再度 hash
+を計算し、server equality には常に SHA-256 を使います。その後の publication は
+[atomic sync protocol](/ja/docs/sync) に従います。
+
+## Browser login and machine credentials
+
+login には shared WebView cookie ではなく system browser を使います。app は `state`
+と PKCE verifier/challenge を生成し、ephemeral loopback listener を起動して
+`/desktop/authorize` を開きます。通常の web login と consent の後、browser は random
+な single-use authorization code を exact loopback redirect に返します。code は 60 秒で
+expire し、user、redirect、PKCE challenge、requested `publish` scope、machine record
+に bind されます。listener は 1 つの valid request を受け付け、`state` を validate
+して終了します。
+
+app は code と verifier を TLS 経由で exchange します。callback URL に session や
+long-lived bearer は含まれません。返される machine credential の V1 wire shape は
+正確に次のとおりです。
+
+```text
+zeh_machine_v1_<random>
+```
+
+`<random>` は cryptographically random な 32 bytes を unpadded base64url で encode
+したものです。credential の lifetime は最長 1 年で、machine-scoped、revocable、
+project operation と publish operation に限定されます。他の credential の管理や
+account-destructive action は実行できません。server は complete token の SHA-256 hash
+を保存し、non-secret prefix/version を別に保持します。raw token は一度だけ表示され、
+macOS Keychain にだけ保存されます。webapp では named machine の list と revoke が
+できます。
+
+## Background lifecycle
+
+launch at login は明示的かつ reversible な opt-in LaunchAgent preference です。login
+による起動は hidden 状態で開始し、authentication prompt を強制しません。menu-bar
+status は tight retry loop を起こさずに offline、authentication、scan、publication
+error を表示し、accessible window が詳細と recovery action を提供します。
+
+wake 時には full scan を開始します。root change、permission failure、watcher failure
+が起きた場合、reconciliation を再開する前に access guard と watcher を再構築します。
+明示的な Quit action は watcher と in-flight background work を終了します。
+
+## Distribution and App Store boundary
+
+direct release は Developer ID、hardened runtime、nested code signing、notarization、
+stapling を使用します。Tauri updater は TLS 経由の signed artifact を使用し、signature
+verification を無効化しません。active publication 中に user confirmation なしで
+restart して update を install してはいけません。
+
+Mac App Store は別の build/release path です。Apple Distribution、App Store
+provisioning profile、sandbox entitlement、App Store review、App Store update を使い、
+direct updater は使いません。2 つの channel では signing identity、entitlement、
+updater configuration を分離します。
+
+App Store build には user-selected-file entitlement と security-scoped bookmark access
+が必要です。app は stale bookmark を resolve し、security-scoped access を正しく
+start/stop する必要があります。実際に sign された sandbox build で root selection、
+relaunch persistence、recursive watcher behavior の test が通るまで、App Store support
+を表明してはいけません。
+
+## Open questions
+
+未決定の desktop decision は次の 4 点だけです。
+
+- recovery と battery/SSD cost の釣り合いを取る periodic full-scan interval はどれか。
+- 最小 macOS version と CPU matrix をどうするか。Apple Silicon/Intel の個別 build
+  または universal binary のどちらを ship するかも含む。
+- 最長 1 年の lifetime 内で active machine credential をどのように、いつ rotate
+  するか。紛失や盗難後の recovery も含む。
+- full security-scoped bookmark handling を、abstraction と signed-sandbox validation
+  milestone から shipping App Store capability に移す時期はいつか。

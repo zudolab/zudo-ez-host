@@ -165,6 +165,13 @@ export async function authenticateMachineToken(
     return errorResult("unknown_credential");
   }
 
+  // Better Auth creates users before the separate handle-claim flow. Until
+  // publish auth stops carrying handles, an unclaimed account cannot form the
+  // existing publish identity and uses the same non-enumerating failure.
+  if (user.canonicalHandle === null) {
+    return errorResult("unknown_credential");
+  }
+
   return {
     ok: true,
     value: {

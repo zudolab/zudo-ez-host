@@ -1,3 +1,23 @@
+CREATE TABLE `account` (
+	`id` text PRIMARY KEY NOT NULL,
+	`issuer` text NOT NULL,
+	`account_id` text NOT NULL,
+	`provider_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`access_token` text,
+	`refresh_token` text,
+	`id_token` text,
+	`access_token_expires_at` integer,
+	`refresh_token_expires_at` integer,
+	`scope` text,
+	`password` text,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `account_issuer_accountId_uidx` ON `account` (`issuer`,`account_id`);--> statement-breakpoint
+CREATE INDEX `account_userId_idx` ON `account` (`user_id`);--> statement-breakpoint
 CREATE TABLE `hostname_allocations` (
 	`label` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -149,22 +169,52 @@ CREATE UNIQUE INDEX `publications_attempt_id_unique` ON `publications` (`attempt
 CREATE UNIQUE INDEX `publications_id_project_id_unique` ON `publications` (`id`,`project_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `publications_project_generation_unique` ON `publications` (`project_id`,`generation`);--> statement-breakpoint
 CREATE INDEX `publications_project_published_at_idx` ON `publications` (`project_id`,`published_at`);--> statement-breakpoint
+CREATE TABLE `session` (
+	`id` text PRIMARY KEY NOT NULL,
+	`expires_at` integer NOT NULL,
+	`token` text NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer NOT NULL,
+	`ip_address` text,
+	`user_agent` text,
+	`user_id` text NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `session_token_unique` ON `session` (`token`);--> statement-breakpoint
+CREATE INDEX `session_userId_idx` ON `session` (`user_id`);--> statement-breakpoint
 CREATE TABLE `user` (
 	`id` text PRIMARY KEY NOT NULL,
-	`canonical_handle` text NOT NULL,
+	`canonical_handle` text,
+	`name` text NOT NULL,
+	`email` text NOT NULL,
+	`email_verified` integer DEFAULT false NOT NULL,
+	`image` text,
 	`active_logical_bytes` integer DEFAULT 0 NOT NULL,
 	`reserved_active_delta_bytes` integer DEFAULT 0 NOT NULL,
 	`retained_staged_physical_bytes` integer DEFAULT 0 NOT NULL,
 	`reserved_physical_upload_bytes` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
-	CONSTRAINT "user_canonical_handle_length" CHECK(length("user"."canonical_handle") between 3 and 20),
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	CONSTRAINT "user_canonical_handle_length" CHECK("user"."canonical_handle" is null or length("user"."canonical_handle") between 3 and 20),
 	CONSTRAINT "user_active_logical_bytes_non_negative" CHECK("user"."active_logical_bytes" >= 0),
 	CONSTRAINT "user_reserved_active_delta_bytes_non_negative" CHECK("user"."reserved_active_delta_bytes" >= 0),
 	CONSTRAINT "user_retained_staged_physical_bytes_non_negative" CHECK("user"."retained_staged_physical_bytes" >= 0),
 	CONSTRAINT "user_reserved_physical_upload_bytes_non_negative" CHECK("user"."reserved_physical_upload_bytes" >= 0)
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `user_email_unique` ON `user` (`email`);--> statement-breakpoint
 CREATE UNIQUE INDEX `user_canonical_handle_unique` ON `user` (`canonical_handle`);--> statement-breakpoint
+CREATE TABLE `verification` (
+	`id` text PRIMARY KEY NOT NULL,
+	`identifier` text NOT NULL,
+	`value` text NOT NULL,
+	`expires_at` integer NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);--> statement-breakpoint
 CREATE TABLE `verified_objects` (
 	`project_id` text NOT NULL,
 	`content_hash` text NOT NULL,

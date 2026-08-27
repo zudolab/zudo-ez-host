@@ -5,6 +5,15 @@ main = "src/index.ts"
 compatibility_date = "2026-08-27"
 compatibility_flags = ["nodejs_compat"]
 
+# Deployment note: keep zone/default Workers caching disabled. Authorization
+# must execute in this Worker before its explicit Cache API lookup.
+[vars]
+PUBLIC_BASE_DOMAIN = "public.test"
+
+[cache]
+# The responder performs an authorization-first Cache API lookup itself.
+enabled = false
+
 [[r2_buckets]]
 binding = "ARTIFACTS"
 bucket_name = "zudo-ez-host-artifacts-local"

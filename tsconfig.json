@@ -27,6 +27,7 @@
     "layouts/**/*",
     "lib/**/*",
     "src/**/*",
+    "packages/*/src/**/*",
     "eslint.config.js",
     "zfb.config.ts"
   ],

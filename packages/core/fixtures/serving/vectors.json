@@ -1,0 +1,360 @@
+{
+  "cases": [
+    {
+      "name": "root index resolves",
+      "request": { "method": "GET", "rawPath": "/", "isHtmlNavigation": true },
+      "flags": {},
+      "manifest": [
+        { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" },
+        { "path": "404.html", "sha256": "missing", "size": 12, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "index.html",
+        "source": "root_index",
+        "entry": { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" },
+        "contentType": "text/html",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/html" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "exact files beat directory indexes",
+      "request": { "method": "GET", "rawPath": "/docs" },
+      "flags": {},
+      "manifest": [
+        { "path": "docs", "sha256": "file", "size": 4, "contentType": "text/plain" },
+        { "path": "docs/index.html", "sha256": "directory", "size": 10, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "docs",
+        "source": "exact",
+        "entry": { "path": "docs", "sha256": "file", "size": 4, "contentType": "text/plain" },
+        "contentType": "text/plain",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/plain" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "directory without exact file redirects and retains query",
+      "request": { "method": "GET", "rawPath": "/docs?from=home%2Fnav&x=1" },
+      "flags": {},
+      "manifest": [
+        { "path": "docs/index.html", "sha256": "directory", "size": 10, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "redirect",
+        "status": 308,
+        "location": "/docs/?from=home%2Fnav&x=1",
+        "source": "directory_redirect",
+        "headers": {
+          "X-Content-Type-Options": "nosniff",
+          "Location": "/docs/?from=home%2Fnav&x=1"
+        },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "directory index resolves with trailing slash",
+      "request": { "method": "HEAD", "rawPath": "/docs/" },
+      "flags": {},
+      "manifest": [
+        { "path": "docs/index.html", "sha256": "directory", "size": 10, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "docs/index.html",
+        "source": "directory_index",
+        "entry": {
+          "path": "docs/index.html",
+          "sha256": "directory",
+          "size": 10,
+          "contentType": "text/html"
+        },
+        "contentType": "text/html",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/html" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "exact matching is case-sensitive and has no implicit html",
+      "request": { "method": "GET", "rawPath": "/About" },
+      "flags": {},
+      "manifest": [
+        { "path": "about.html", "sha256": "about", "size": 10, "contentType": "text/html" },
+        { "path": "about", "sha256": "lower", "size": 5, "contentType": "text/plain" }
+      ],
+      "expected": {
+        "kind": "not_found",
+        "status": 404,
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "root custom 404 wins when spa is disabled",
+      "request": { "method": "GET", "rawPath": "/missing", "isHtmlNavigation": true },
+      "flags": {},
+      "manifest": [
+        { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" },
+        { "path": "404.html", "sha256": "custom", "size": 9, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 404,
+        "path": "404.html",
+        "source": "custom_404",
+        "entry": { "path": "404.html", "sha256": "custom", "size": 9, "contentType": "text/html" },
+        "contentType": "text/html",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/html" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "enabled spa navigation takes precedence over custom 404",
+      "request": { "method": "GET", "rawPath": "/missing", "isHtmlNavigation": true },
+      "flags": { "spaFallback": true },
+      "manifest": [
+        { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" },
+        { "path": "404.html", "sha256": "custom", "size": 9, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "index.html",
+        "source": "spa_fallback",
+        "entry": { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" },
+        "contentType": "text/html",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/html" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "spa does not hide asset-like miss",
+      "request": { "method": "GET", "rawPath": "/assets/app.js", "isHtmlNavigation": false },
+      "flags": { "spaFallback": true },
+      "manifest": [
+        { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" },
+        { "path": "404.html", "sha256": "custom", "size": 9, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 404,
+        "path": "404.html",
+        "source": "custom_404",
+        "entry": { "path": "404.html", "sha256": "custom", "size": 9, "contentType": "text/html" },
+        "contentType": "text/html",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/html" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "unknown content type uses octet stream fallback",
+      "request": { "method": "GET", "rawPath": "/download" },
+      "flags": {},
+      "manifest": [{ "path": "download", "sha256": "download", "size": 3, "contentType": "" }],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "download",
+        "source": "exact",
+        "entry": { "path": "download", "sha256": "download", "size": 3, "contentType": "" },
+        "contentType": "application/octet-stream",
+        "headers": {
+          "X-Content-Type-Options": "nosniff",
+          "Content-Type": "application/octet-stream"
+        },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "gated artifact is no store and bypasses shared cache",
+      "request": { "method": "GET", "rawPath": "/index.html" },
+      "flags": { "gated": true },
+      "manifest": [
+        { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "index.html",
+        "source": "exact",
+        "entry": { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" },
+        "contentType": "text/html",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/html" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "unsupported methods carry allow header",
+      "request": { "method": "PUT", "rawPath": "/index.html" },
+      "flags": {},
+      "manifest": [
+        { "path": "index.html", "sha256": "root", "size": 10, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "method_not_allowed",
+        "status": 405,
+        "allow": "GET, HEAD",
+        "headers": { "X-Content-Type-Options": "nosniff", "Allow": "GET, HEAD" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "gate login post is passed through",
+      "request": { "method": "POST", "rawPath": "/__gate/login", "route": "gate-login" },
+      "flags": { "gated": true },
+      "manifest": [],
+      "expected": {
+        "kind": "pass_through",
+        "method": "POST",
+        "route": "gate-login",
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "malformed percent encoding is rejected",
+      "request": { "method": "GET", "rawPath": "/bad%2" },
+      "flags": {},
+      "manifest": [],
+      "expected": {
+        "kind": "rejected",
+        "status": 400,
+        "reason": "malformed_encoding",
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "encoded slash is rejected before decoding",
+      "request": { "method": "GET", "rawPath": "/safe%2fsecret" },
+      "flags": {},
+      "manifest": [],
+      "expected": {
+        "kind": "rejected",
+        "status": 400,
+        "reason": "encoded_separator",
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "encoded backslash is rejected before decoding",
+      "request": { "method": "GET", "rawPath": "/safe%5Csecret" },
+      "flags": {},
+      "manifest": [],
+      "expected": {
+        "kind": "rejected",
+        "status": 400,
+        "reason": "encoded_separator",
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "dot prefixed segments are rejected after decoding",
+      "request": { "method": "GET", "rawPath": "/%2Eenv/config" },
+      "flags": {},
+      "manifest": [],
+      "expected": {
+        "kind": "rejected",
+        "status": 400,
+        "reason": "dot_prefixed_segment",
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "dot segments are rejected after decoding",
+      "request": { "method": "GET", "rawPath": "/docs/%2E%2E/secret" },
+      "flags": {},
+      "manifest": [],
+      "expected": {
+        "kind": "rejected",
+        "status": 400,
+        "reason": "dot_segment",
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "nul is rejected",
+      "request": { "method": "GET", "rawPath": "/bad%00name" },
+      "flags": {},
+      "manifest": [],
+      "expected": {
+        "kind": "rejected",
+        "status": 400,
+        "reason": "nul_byte",
+        "headers": { "X-Content-Type-Options": "nosniff" },
+        "cachePolicy": "noStore",
+        "cacheBypass": true
+      }
+    },
+    {
+      "name": "query is ignored for lookup",
+      "request": { "method": "GET", "rawPath": "/app.js?version=2" },
+      "flags": {},
+      "manifest": [
+        { "path": "app.js", "sha256": "app", "size": 3, "contentType": "text/javascript" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "app.js",
+        "source": "exact",
+        "entry": { "path": "app.js", "sha256": "app", "size": 3, "contentType": "text/javascript" },
+        "contentType": "text/javascript",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/javascript" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    },
+    {
+      "name": "decoded unreserved path still matches exact manifest entry",
+      "request": { "method": "GET", "rawPath": "/about%2Ehtml" },
+      "flags": {},
+      "manifest": [
+        { "path": "about.html", "sha256": "about", "size": 10, "contentType": "text/html" }
+      ],
+      "expected": {
+        "kind": "serve",
+        "status": 200,
+        "path": "about.html",
+        "source": "exact",
+        "entry": {
+          "path": "about.html",
+          "sha256": "about",
+          "size": 10,
+          "contentType": "text/html"
+        },
+        "contentType": "text/html",
+        "headers": { "X-Content-Type-Options": "nosniff", "Content-Type": "text/html" },
+        "cachePolicy": "revalidate",
+        "cacheBypass": false
+      }
+    }
+  ]
+}

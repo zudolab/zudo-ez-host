@@ -26,6 +26,12 @@ const defaultLocaleOnlyPrefixes = [
   "/docs/claude-commands/",
 ];
 
+// The Claude landing page is generated into the default-locale tree during a
+// docs build, while its hand-written JA mirror is tracked. Treat that expected
+// generated counterpart as present so the standalone parity command also works
+// on a clean checkout before the first build.
+const generatedEnglishPageKeys = new Set(["claude/index"]);
+
 const contentExtensions = new Set([".md", ".mdx"]);
 
 async function collectPageKeys(rootDir) {
@@ -86,7 +92,9 @@ for (const entry of japanesePages) japaneseByKey.set(entry.key, entry);
 const missingJapanese = englishPages.filter(
   (entry) => !japaneseByKey.has(entry.key) && !isDefaultLocaleOnly(entry.key),
 );
-const missingEnglish = japanesePages.filter((entry) => !englishByKey.has(entry.key));
+const missingEnglish = japanesePages.filter(
+  (entry) => !englishByKey.has(entry.key) && !generatedEnglishPageKeys.has(entry.key),
+);
 
 const duplicateEnglish = englishPages.filter(
   (entry, index, pages) => index > 0 && pages[index - 1].key === entry.key,

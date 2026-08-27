@@ -1,4 +1,4 @@
-# Doc
+# zudo-ez-host documentation
 
 Documentation site built with [zudo-doc](https://github.com/zudolab/zudo-doc) — a zfb-based documentation framework with MDX, Tailwind CSS v4, and Preact islands. This project is intentionally minimal: one config file (`zfb.config.ts`) plus markdown content — layout, chrome, and islands all ship from `@takazudo/zudo-doc` in `node_modules`.
 
@@ -32,7 +32,7 @@ pages/
 src/
 ├── chrome-bindings.tsx   # optional typed primary chrome / named header / MDX bindings
 ├── content/
-│   └── docs/             # MDX content (this project's showcase docs)
+│   └── docs/             # English product and architecture specifications
 │   └── docs-ja/         # Japanese MDX content (mirrors docs/)
 └── styles/
     └── global.css        # @import chain + a token-override slot — that's it

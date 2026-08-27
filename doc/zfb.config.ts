@@ -4,7 +4,10 @@ import { zudoDoc } from "@takazudo/zudo-doc/config";
 export default defineConfig(
   zudoDoc({
     themePack: "drift",
-    siteName: "Doc",
+    siteName: "zudo-ez-host",
+    siteDescription:
+      "Architecture and product specifications for the zudo-ez-host static-site publishing service.",
+    githubUrl: "https://github.com/zudolab/zudo-ez-host",
     locales: {
       ja: {
         label: "JA",
@@ -14,7 +17,9 @@ export default defineConfig(
     metaTags: {
       description: true,
       keywords: "",
-      ogImage: "/img/ogp.png",
+      // Add a social-card asset before enabling this; the preset path does not
+      // exist in the generated scaffold and would emit a broken og:image URL.
+      ogImage: false,
       ogSiteName: true,
       twitterCard: false,
     },
@@ -40,7 +45,7 @@ export default defineConfig(
     ],
     footer: {
       links: [],
-      copyright: "Copyright © 2026 Your Name. Built with zudo-doc.",
+      copyright: "Copyright © 2026 zudo-ez-host contributors. Built with zudo-doc.",
     },
     headerNav: [
       {
@@ -49,9 +54,24 @@ export default defineConfig(
         categoryMatch: "getting-started",
       },
       {
-        label: "Claude",
-        path: "/docs/claude",
-        categoryMatch: "claude",
+        label: "Concepts",
+        path: "/docs/concepts",
+        categoryMatch: "concepts",
+      },
+      {
+        label: "Hosting",
+        path: "/docs/hosting",
+        categoryMatch: "hosting",
+      },
+      {
+        label: "Sync",
+        path: "/docs/sync",
+        categoryMatch: "sync",
+      },
+      {
+        label: "Webapp",
+        path: "/docs/webapp",
+        categoryMatch: "webapp",
       },
     ],
     headerRightItems: [

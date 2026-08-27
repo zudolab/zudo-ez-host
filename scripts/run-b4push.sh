@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Pre-push check suite for zudo-ez-host. The first five steps mirror
+# Pre-push check suite for zudo-ez-host. All seven steps mirror
 # .github/workflows/ci.yml so failures surface locally instead of on the
-# runner; the final two steps validate the generated documentation site.
+# runner, including the documentation parity and link checks.
 #
 # Failures are collected rather than exited on, so one run reports every broken
 # step instead of costing a round-trip per fix.

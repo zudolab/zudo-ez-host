@@ -14,3 +14,8 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "ARTIFACTS"
 bucket_name = "zudo-ez-host-artifacts-local"
+
+[[services]]
+binding = "PUBLICATION_RESOLVER"
+service = "zudo-ez-host-control-local"
+entrypoint = "PublicationResolver"

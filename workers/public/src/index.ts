@@ -448,25 +448,6 @@ export function createPublicHandler(dependencies: PublicHandlerDependencies): Pu
 /** Alias emphasizing that this factory returns a request handler, not an app server. */
 export const createPublicRequestHandler = createPublicHandler;
 
-async function resolutionProbe(
-  request: Request,
-  resolver: PublicationResolverBinding,
-): Promise<Response> {
-  const match = /^\/resolution\/([^/]+)$/.exec(new URL(request.url).pathname);
-  const encodedProjectId = match?.[1];
-  if (encodedProjectId === undefined) {
-    return platformNotFound();
-  }
-
-  try {
-    const projectId = decodeURIComponent(encodedProjectId);
-    const resolution = await resolver.resolvePublication(projectId);
-    return Response.json(resolution);
-  } catch {
-    return platformNotFound();
-  }
-}
-
 type PublicWorkerEnv = Omit<PublicEnv, "CONTROL"> & {
   CONTROL: PublicationResolverBinding;
   PUBLIC_BASE_DOMAIN: string;
@@ -474,12 +455,6 @@ type PublicWorkerEnv = Omit<PublicEnv, "CONTROL"> & {
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    // Keep the scaffold's named service-binding smoke endpoint intact. It is
-    // not part of public content routing and is removed with the test probe.
-    if (new URL(request.url).pathname.startsWith("/resolution/")) {
-      return resolutionProbe(request, env.CONTROL);
-    }
-
     return createPublicHandler({
       publicBaseDomain: env.PUBLIC_BASE_DOMAIN,
       resolver: env.CONTROL,

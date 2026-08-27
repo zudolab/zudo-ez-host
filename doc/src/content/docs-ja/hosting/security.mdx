@@ -89,6 +89,8 @@ cookie、service-worker takeover を防ぎます。
 per-project password protection は既定で off です。これは shared preview access であり、
 visitor identity ではありません。individual user、role、per-visitor audit、特定 visitor
 だけの revocation は作りません。
+この boundary を enable、rotate、disable する product control は、
+[password gate](/ja/docs/webapp/password-gates/)で別途定義します。
 
 有効な場合、private gate service が slow salted password verifier と、採用する pepper /
 signing secret を所有します。公開するのは purpose-specific authorization / password-

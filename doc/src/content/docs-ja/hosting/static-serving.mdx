@@ -86,3 +86,5 @@ uploader と server は、同じ保守的な path boundary を強制します。
 
 DNS label は別途 canonical lowercase かつ case-insensitive です。これは artifact lookup
 の case-sensitive 性を弱めません。
+publishing client は、[sync protocol](/ja/docs/sync/)の一部として、promotion 前に
+これらの path exclusion を適用します。

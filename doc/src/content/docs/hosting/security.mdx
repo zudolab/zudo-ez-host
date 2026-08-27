@@ -95,6 +95,8 @@ takeover.
 Per-project password protection defaults off. It is shared preview access, not
 visitor identity: it creates no individual users, roles, per-visitor audit, or
 selective visitor revocation.
+The product controls for enabling, rotating, and disabling this boundary are
+defined separately in [Password gates](/docs/webapp/password-gates/).
 
 When enabled, a private gate service owns the slow salted password verifier and
 any pepper or signing secret. It exposes only purpose-specific authorization

@@ -55,6 +55,8 @@ partially uploaded site. On every request, current publication and gate
 authorization happens before any shared-cache lookup or R2 read. Public cache
 keys include the exact artifact hash and normalized path rather than only the
 vanity hostname, so an older artifact cannot be mistaken for the current one.
+The prepare, upload, and atomic promotion protocol is defined in the
+[Sync protocol](/docs/sync/).
 
 ## Cloudflare resources
 

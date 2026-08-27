@@ -55,6 +55,8 @@ immutable artifact を current にするため、request が upload 途中の si
 を shared-cache lookup や R2 read より先に行います。public cache key には vanity
 hostname だけでなく、正確な artifact hash と normalized path を含めるため、古い
 artifact を current と誤認しません。
+prepare、upload、atomic promotion の protocol は
+[sync protocol](/ja/docs/sync/)で定義します。
 
 ## Cloudflare resources
 

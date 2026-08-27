@@ -20,3 +20,4 @@ export {
   findPortablePathCollisionV1,
 } from "./paths/index.js";
 export type { CanonicalPath, PathRejectionReason, PortablePathCollision } from "./paths/index.js";
+export * from "./serving/index.js";

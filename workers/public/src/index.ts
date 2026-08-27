@@ -4,6 +4,7 @@ import type {
   ServingDecision,
 } from "@zudo-ez-host/core";
 import {
+  MAX_CANONICAL_MANIFEST_BYTES,
   createManifestLookup,
   decodeManifest,
   parseLabel,
@@ -247,6 +248,9 @@ async function loadManifest(
   }
 
   if (object === null) {
+    return undefined;
+  }
+  if (object.size > MAX_CANONICAL_MANIFEST_BYTES) {
     return undefined;
   }
 

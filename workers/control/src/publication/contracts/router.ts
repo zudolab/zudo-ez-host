@@ -3,6 +3,7 @@ import type { Context, Handler } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 import { MACHINE_AUTH_CONTEXT_KEY, type MachineAuthEnv } from "../../auth/index.js";
+import { readBoundedJsonRequest, RequestBodyError } from "../../http/request-body.js";
 import { createReadOnlyR2Bucket } from "../../storage/index.js";
 import type { UploadUrlSigner } from "../../storage/index.js";
 import {
@@ -20,6 +21,8 @@ export interface PublicationContractsRouterOptions {
   /** Injectable clock for workerd tests; production uses Date.now. */
   readonly now?: () => number;
 }
+
+export const MAX_PUBLICATION_CONTRACTS_REQUEST_BYTES = 16 * 1024 * 1024;
 
 const unconfiguredSigner: UploadUrlSigner = {
   async signUpload() {
@@ -39,8 +42,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function parseBody(request: Request): Promise<unknown> {
   try {
-    return await request.json();
-  } catch {
+    return await readBoundedJsonRequest(request, MAX_PUBLICATION_CONTRACTS_REQUEST_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      throw new UploadContractsError("invalid_request", error.message, error.status);
+    }
     throw new UploadContractsError("invalid_request", "Request body must be valid JSON");
   }
 }

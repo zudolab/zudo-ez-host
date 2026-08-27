@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 import { MACHINE_AUTH_CONTEXT_KEY, type MachineAuthEnv } from "../../auth/index.js";
+import { readBoundedJsonRequest, RequestBodyError } from "../../http/request-body.js";
 import { CommitPublicationError, commitPublication } from "./commit.js";
 
 export interface PublicationCommitRouterOptions {
@@ -16,25 +17,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function attemptIdFromRequest(request: Request): Promise<string> {
-  const declaredLength = request.headers.get("Content-Length");
-  if (declaredLength !== null) {
-    const length = Number(declaredLength);
-    if (!Number.isSafeInteger(length) || length < 0 || length > MAX_COMMIT_REQUEST_BYTES) {
-      throw new CommitPublicationError("invalid_request", "Commit request body is too large", {
-        status: 413,
-      });
-    }
-  }
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_COMMIT_REQUEST_BYTES) {
-    throw new CommitPublicationError("invalid_request", "Commit request body is too large", {
-      status: 413,
-    });
-  }
   let body: unknown;
   try {
-    body = JSON.parse(text) as unknown;
-  } catch {
+    body = await readBoundedJsonRequest(request, MAX_COMMIT_REQUEST_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      throw new CommitPublicationError("invalid_request", error.message, {
+        status: error.status,
+      });
+    }
     throw new CommitPublicationError("invalid_request", "Request body must be valid JSON");
   }
   if (!isRecord(body) || typeof body.attemptId !== "string" || body.attemptId.length === 0) {

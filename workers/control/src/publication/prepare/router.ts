@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 import { MACHINE_AUTH_CONTEXT_KEY, type MachineAuthEnv } from "../../auth/index.js";
+import { readBoundedJsonRequest, RequestBodyError } from "../../http/request-body.js";
 import type { UploadUrlSigner } from "../../storage/index.js";
 import { PreparePublicationError, preparePublication } from "./prepare.js";
 
@@ -72,25 +73,13 @@ function manifestBytes(body: Record<string, unknown>): Uint8Array {
 }
 
 async function parseRequest(request: Request): Promise<Record<string, unknown>> {
-  const declaredLength = request.headers.get("Content-Length");
-  if (declaredLength !== null) {
-    const length = Number(declaredLength);
-    if (!Number.isSafeInteger(length) || length < 0 || length > MAX_PREPARE_REQUEST_BYTES) {
-      throw new PreparePublicationError(
-        "invalid_request",
-        "Prepare request body is too large",
-        413,
-      );
-    }
-  }
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_PREPARE_REQUEST_BYTES) {
-    throw new PreparePublicationError("invalid_request", "Prepare request body is too large", 413);
-  }
   let value: unknown;
   try {
-    value = JSON.parse(text) as unknown;
-  } catch {
+    value = await readBoundedJsonRequest(request, MAX_PREPARE_REQUEST_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      throw new PreparePublicationError("invalid_request", error.message, error.status);
+    }
     throw new PreparePublicationError("invalid_request", "Request body must be valid JSON");
   }
   if (!isRecord(value)) {

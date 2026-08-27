@@ -1,4 +1,5 @@
 import {
+  MAX_CANONICAL_MANIFEST_BYTES,
   MANIFEST_SCHEMA_VERSION,
   SERVING_SEMANTICS_VERSION,
   encodeCanonical,
@@ -488,6 +489,29 @@ describe("public Worker", () => {
     expect(cachePutCount).toBe(0);
   });
 
+  it("rejects an oversized promoted manifest before buffering its body", async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    const artifacts = {
+      get: vi.fn(async () => ({
+        size: MAX_CANONICAL_MANIFEST_BYTES + 1,
+        arrayBuffer,
+      })),
+      head: vi.fn(async () => null),
+    } as unknown as ReadOnlyR2Bucket;
+    const handler = createPublicHandler({
+      publicBaseDomain: PUBLIC_BASE_DOMAIN,
+      resolver: fixtureResolver(),
+      artifacts,
+      cache: new MemoryCache(),
+    });
+
+    const response = await handler.fetch(publicRequest("/"));
+
+    expect(response.status).toBe(404);
+    await expect(response.text()).resolves.toBe("Not found");
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
   it("uses an artifact/hash/path cache key rather than a vanity host", () => {
     const key = createArtifactCacheKey(PROJECT_ID, ARTIFACT_HASH, "dir/index.html");
 
@@ -512,6 +536,7 @@ describe("public Worker publication topology", () => {
       body: JSON.stringify({ slug: "site", displayName: "E2E site" }),
     });
     expect(registration.status).toBe(201);
+    expect(registration.headers.get("Cache-Control")).toBe("no-store");
     const registered = (await registration.json()) as {
       project: { id: string; status: string };
       hostname: string;

@@ -1,7 +1,17 @@
 import tseslint from "typescript-eslint";
 
 export default [
-  { ignores: ["node_modules/", "dist/", "worktrees/", ".wrangler/"] },
+  {
+    ignores: [
+      "node_modules/",
+      "dist/",
+      "**/.zfb/",
+      "**/.zfb-build/",
+      "**/.zudo-doc/",
+      "worktrees/",
+      ".wrangler/",
+    ],
+  },
   ...tseslint.configs.recommended.map((config) => ({
     ...config,
     files: ["**/*.ts", "**/*.tsx"],

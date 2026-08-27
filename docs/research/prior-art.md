@@ -4,12 +4,12 @@ This memo records the verified mechanisms that are most relevant to ez-host. It
 uses the repository snapshots below; statements labelled **Inference** are the
 design conclusions drawn for ez-host rather than claims made by the source.
 
-| System | Verified snapshot | Primary reference |
-| --- | --- | --- |
-| zudo-file-sync | `4e5093754405c14bfeb5b8fdf4f89cd541cbcd21` | [zudolab/zudo-file-sync](https://github.com/zudolab/zudo-file-sync/tree/4e5093754405c14bfeb5b8fdf4f89cd541cbcd21) |
-| zudo-text | current `3346d5b92caa4409d7b2cc486222f9302760b730`; lineage `efd63990158dd0e3df4d56b3893b10ffef67120b` and `ad69fa7198f04d2da71cb556c9debea557e07913` | [zudolab/zudo-text](https://github.com/zudolab/zudo-text/tree/3346d5b92caa4409d7b2cc486222f9302760b730) |
-| zudo-doc-cloud | `06a1cd18dca48511c8b533ac5fa42b6669c08131` | [zudolab/zudo-doc-cloud](https://github.com/zudolab/zudo-doc-cloud/tree/06a1cd18dca48511c8b533ac5fa42b6669c08131) |
-| zfb-example-password-gate | `72d2fbb5c9992e9125e66fde519422fff834926f` | [Takazudo/zfb-example-password-gate](https://github.com/Takazudo/zfb-example-password-gate/tree/72d2fbb5c9992e9125e66fde519422fff834926f) |
+| System                    | Verified snapshot                                                                                                                                     | Primary reference                                                                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| zudo-file-sync            | `4e5093754405c14bfeb5b8fdf4f89cd541cbcd21`                                                                                                            | [zudolab/zudo-file-sync](https://github.com/zudolab/zudo-file-sync/tree/4e5093754405c14bfeb5b8fdf4f89cd541cbcd21)                         |
+| zudo-text                 | current `3346d5b92caa4409d7b2cc486222f9302760b730`; lineage `efd63990158dd0e3df4d56b3893b10ffef67120b` and `ad69fa7198f04d2da71cb556c9debea557e07913` | [zudolab/zudo-text](https://github.com/zudolab/zudo-text/tree/3346d5b92caa4409d7b2cc486222f9302760b730)                                   |
+| zudo-doc-cloud            | `06a1cd18dca48511c8b533ac5fa42b6669c08131`                                                                                                            | [zudolab/zudo-doc-cloud](https://github.com/zudolab/zudo-doc-cloud/tree/06a1cd18dca48511c8b533ac5fa42b6669c08131)                         |
+| zfb-example-password-gate | `72d2fbb5c9992e9125e66fde519422fff834926f`                                                                                                            | [Takazudo/zfb-example-password-gate](https://github.com/Takazudo/zfb-example-password-gate/tree/72d2fbb5c9992e9125e66fde519422fff834926f) |
 
 ## zudo-file-sync: a Cloudflare-only bidirectional file sync
 
@@ -351,13 +351,13 @@ and unprotected.
 requires explicit named service entrypoints. The default Worker export is only
 cron/HTTP and is unavailable as an RPC surface. The relevant matrix is:
 
-| Named entrypoint | Capability |
-| --- | --- |
-| `HostedPublicResolver` | anonymous current-site resolution only |
-| `HostedOwnerCommands` | project-scoped publish/unpublish and admission reads |
-| `HostedBuildCommands` | artifact/deployment orchestration and promotion |
+| Named entrypoint         | Capability                                                 |
+| ------------------------ | ---------------------------------------------------------- |
+| `HostedPublicResolver`   | anonymous current-site resolution only                     |
+| `HostedOwnerCommands`    | project-scoped publish/unpublish and admission reads       |
+| `HostedBuildCommands`    | artifact/deployment orchestration and promotion            |
 | `HostedOperatorCommands` | inspection, audit, suspension/resume, takedown, collection |
-| `HostedOutboxDispatcher` | bounded outbox lease/ack/retry/park/cancel |
+| `HostedOutboxDispatcher` | bounded outbox lease/ack/retry/park/cancel                 |
 
 The public Worker binds `HOSTING_CONTROL` specifically to
 `HostedPublicResolver` and `HOSTED_INTEGRITY_SIGNALS` to the enqueue-only

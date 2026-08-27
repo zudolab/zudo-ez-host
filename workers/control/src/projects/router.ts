@@ -1,21 +1,32 @@
+import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 
-import { MACHINE_AUTH_CONTEXT_KEY, type MachineAuthContext } from "../auth/index.js";
+import {
+  authenticateMachineRequest,
+  authenticateSession,
+  exactControlCorsMiddleware,
+  hasExactTrustedOrigin,
+  type MachineAuthError,
+} from "../auth/index.js";
+import { createControlDatabase } from "../db/database.js";
+import { getOwnedProject } from "../db/queries.js";
 import { readBoundedJsonRequest, RequestBodyError } from "../http/request-body.js";
 import {
   ProjectRegistrationError,
   registerProject,
+  type ProjectOwnerContext,
   type ProjectRegistrationInput,
 } from "./registration.js";
 
-export const AUTHENTICATED_OWNER_CONTEXT = MACHINE_AUTH_CONTEXT_KEY;
+export const PROJECT_AUTH_CONTEXT_KEY = "projectAuth" as const;
+export const AUTHENTICATED_OWNER_CONTEXT = PROJECT_AUTH_CONTEXT_KEY;
 export const MAX_PROJECT_REGISTRATION_REQUEST_BYTES = 64 * 1024;
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
 
 export interface ProjectRouteVariables {
-  /** Set by machine-auth middleware before this router is reached. */
-  readonly [MACHINE_AUTH_CONTEXT_KEY]?: MachineAuthContext;
+  readonly [PROJECT_AUTH_CONTEXT_KEY]: ProjectOwnerContext;
 }
 
 type ProjectRouteEnv = {
@@ -28,9 +39,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseRegistrationInput(value: unknown): ProjectRegistrationInput | null {
-  if (!isRecord(value) || !("slug" in value)) {
-    return null;
-  }
+  if (!isRecord(value) || !("slug" in value)) return null;
   return {
     slug: value.slug,
     displayName: value.displayName,
@@ -38,11 +47,48 @@ function parseRegistrationInput(value: unknown): ProjectRegistrationInput | null
   };
 }
 
-export const projectsRouter = new Hono<ProjectRouteEnv>().post("/", async (context) => {
-  const owner = context.get(MACHINE_AUTH_CONTEXT_KEY);
-  if (owner === undefined || owner === null) {
-    return context.json({ error: "machine_auth_required" }, 401, NO_STORE_HEADERS);
-  }
+function machineUnauthorized(
+  context: Parameters<MiddlewareHandler<ProjectRouteEnv>>[0],
+  error: MachineAuthError,
+) {
+  return context.json(error, 401, {
+    "Cache-Control": "no-store",
+    "WWW-Authenticate": "Bearer",
+  });
+}
+
+/** Select exactly one authority: an explicit bearer credential, otherwise a session. */
+const projectAuthMiddleware: MiddlewareHandler<ProjectRouteEnv> = createMiddleware(
+  async (context, next) => {
+    if (context.req.header("authorization") !== undefined) {
+      const result = await authenticateMachineRequest(context.req.raw, context.env.DB);
+      if (!result.ok) return machineUnauthorized(context, result.error);
+      context.set(PROJECT_AUTH_CONTEXT_KEY, { userId: result.value.userId });
+      await next();
+      return;
+    }
+
+    if (
+      context.req.method !== "GET" &&
+      context.req.method !== "HEAD" &&
+      !hasExactTrustedOrigin(context.req.raw, context.env.BETTER_AUTH_TRUSTED_ORIGINS)
+    ) {
+      return context.json({ error: "invalid_origin" }, 403, NO_STORE_HEADERS);
+    }
+
+    const session = await authenticateSession(context.req.raw, context.env);
+    if (session === null) {
+      return context.json({ error: "session_authentication_required" }, 401, NO_STORE_HEADERS);
+    }
+    context.set(PROJECT_AUTH_CONTEXT_KEY, session);
+    await next();
+  },
+);
+
+const router = new Hono<ProjectRouteEnv>();
+
+router.post("/", exactControlCorsMiddleware, projectAuthMiddleware, async (context) => {
+  const owner = context.get(PROJECT_AUTH_CONTEXT_KEY);
 
   let body: unknown;
   try {
@@ -87,3 +133,18 @@ export const projectsRouter = new Hono<ProjectRouteEnv>().post("/", async (conte
     return context.json({ error: "project_registration_failed" }, 500, NO_STORE_HEADERS);
   }
 });
+
+router.get("/:projectId", exactControlCorsMiddleware, projectAuthMiddleware, async (context) => {
+  const owner = context.get(PROJECT_AUTH_CONTEXT_KEY);
+  const project = await getOwnedProject(
+    createControlDatabase(context.env.DB),
+    owner.userId,
+    context.req.param("projectId"),
+  );
+  if (project === undefined) {
+    return context.json({ error: "project_not_found" }, 404, NO_STORE_HEADERS);
+  }
+  return context.json({ project }, 200, NO_STORE_HEADERS);
+});
+
+export const projectsRouter = router;

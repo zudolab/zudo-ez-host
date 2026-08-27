@@ -608,7 +608,6 @@ describe("authenticated client route surface", () => {
       createMiddleware<MachineAuthEnv>(async (context, next) => {
         context.set(MACHINE_AUTH_CONTEXT_KEY, {
           userId: owner.user.id,
-          canonicalHandle: owner.user.canonicalHandle,
           machineId: owner.machine.id,
         });
         await next();

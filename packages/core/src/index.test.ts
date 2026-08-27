@@ -13,6 +13,10 @@ import {
   MAX_PRESIGNED_URL_ISSUANCES_PER_ACCOUNT_PER_MINUTE,
   MAX_RETAINED_AND_STAGED_BYTES_PER_ACCOUNT,
   MAX_UPLOAD_CONCURRENCY_PER_MACHINE,
+  MACHINE_TOKEN_PREFIX,
+  MACHINE_TOKEN_VERSION,
+  generateMachineToken,
+  parseMachineToken,
 } from "./index.js";
 
 describe("@zudo-ez-host/core", () => {
@@ -43,6 +47,15 @@ describe("@zudo-ez-host/core", () => {
       MAX_PREPARES_PER_ACCOUNT_PER_MINUTE: 5,
       MAX_COMMITS_PER_PROJECT_PER_MINUTE: 10,
       MAX_PRESIGNED_URL_ISSUANCES_PER_ACCOUNT_PER_MINUTE: 1_000,
+    });
+  });
+
+  it("exports the machine-token wire helpers from the core barrel", () => {
+    const parsed = parseMachineToken(generateMachineToken());
+
+    expect(parsed).toEqual({
+      ok: true,
+      value: { prefix: MACHINE_TOKEN_PREFIX, version: MACHINE_TOKEN_VERSION },
     });
   });
 });

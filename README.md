@@ -7,9 +7,9 @@ zudo-ez-host is a Dropbox-public-folder-like hosting system whose Mac menubar ap
 The bootstrap and specification phase is complete. First-party packages under
 `packages/*` and the identity foundation under `workers/*` are now in scope.
 Invited email/password accounts, canonical handles, named-machine enrollment,
-and machine-scoped publication authorization have landed. Production Workers
-deployment configuration and deploy-specific dependencies remain deferred to
-the Workers epic. The bilingual documentation site is scaffolded under
+and machine-scoped publication authorization have landed. Production
+Cloudflare resource provisioning, routes, and secrets remain deferred to the
+Workers epic. The bilingual documentation site is scaffolded under
 [`doc/`](doc/).
 
 ## Development

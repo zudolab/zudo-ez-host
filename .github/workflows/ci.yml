@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   build-and-check:
-    name: Format, lint, typecheck, build, docs
+    name: Format, lint, typecheck, build, test, docs
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -50,6 +50,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm test
 
       - name: Documentation i18n parity
         run: pnpm check:doc:i18n

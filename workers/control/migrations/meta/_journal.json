@@ -15,6 +15,13 @@
       "when": 1787855064156,
       "tag": "0001_immutable-invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787855853362,
+      "tag": "0002_public_madame_hydra",
+      "breakpoints": true
     }
   ]
 }

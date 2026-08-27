@@ -1,4 +1,4 @@
-import { accounts, sessions, users, verifications } from "./schema.js";
+import { accounts, rateLimits, sessions, users, verifications } from "./schema.js";
 
 /**
  * Better Auth's Drizzle adapter resolves models with exact schema-object keys.
@@ -9,4 +9,5 @@ export const authSchema = {
   session: sessions,
   account: accounts,
   verification: verifications,
+  rateLimit: rateLimits,
 };

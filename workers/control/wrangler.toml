@@ -5,6 +5,12 @@ main = "src/index.ts"
 compatibility_date = "2026-08-27"
 compatibility_flags = ["nodejs_compat"]
 
+# Non-secret local/test defaults. Production auth secrets, the signup allowlist,
+# and Google credentials are set with `wrangler secret put`.
+[vars]
+BETTER_AUTH_BASE_URL = "https://control.test"
+BETTER_AUTH_TRUSTED_ORIGINS = "https://control.test"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "zudo-ez-host-control-local"

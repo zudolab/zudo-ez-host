@@ -5,7 +5,13 @@ import {
   machineAuthMiddleware,
   type MachineAuthEnv,
 } from "./auth/machine-auth.js";
-import { loginPageResponse, safeReturnTo } from "./auth/login-page.js";
+import {
+  hasSameOrigin,
+  LoginFormError,
+  loginPageResponse,
+  readLoginForm,
+  safeReturnTo,
+} from "./auth/login-page.js";
 import { projectsRouter } from "./projects/index.js";
 import {
   createPublicationContractsRouter,
@@ -32,20 +38,29 @@ export function createControlApp(options: ControlAppOptions = {}): Hono<MachineA
   app.route("/", healthRouter);
   app.get("/login", (context) => loginPageResponse(safeReturnTo(context.req.query("returnTo"))));
   app.post("/login", async (context) => {
-    const { createAuth } = await import("./auth/better-auth.js");
-    const form = await context.req.raw.formData();
-    const returnTo = safeReturnTo(
-      typeof form.get("returnTo") === "string" ? String(form.get("returnTo")) : undefined,
-    );
+    if (!hasSameOrigin(context.req.raw)) {
+      return loginPageResponse("/", "Invalid login request", 403);
+    }
+    let form: URLSearchParams;
+    try {
+      form = await readLoginForm(context.req.raw);
+    } catch (error) {
+      if (error instanceof LoginFormError) {
+        return loginPageResponse("/", "Invalid login request", error.status);
+      }
+      throw error;
+    }
+    const returnTo = safeReturnTo(form.get("returnTo"));
     const email = form.get("email");
     const password = form.get("password");
-    if (typeof email !== "string" || typeof password !== "string") {
+    if (email === null || password === null) {
       return loginPageResponse(returnTo, "Email and password are required", 400);
     }
 
+    const { createAuth } = await import("./auth/better-auth.js");
     const headers = new Headers({
       "content-type": "application/json",
-      origin: new URL(context.req.url).origin,
+      origin: context.req.header("origin") ?? "",
     });
     const connectingIp = context.req.header("cf-connecting-ip");
     if (connectingIp) headers.set("cf-connecting-ip", connectingIp);

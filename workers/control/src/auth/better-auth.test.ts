@@ -156,6 +156,17 @@ describe("Better Auth runtime", () => {
       GOOGLE_CALLBACK_URL: "https://other.test/api/auth/callback/google",
     });
     expect(mismatched.options.socialProviders).toEqual({});
+
+    const complete = createAuth({
+      ...runtimeEnv(INVITED_EMAIL),
+      GOOGLE_CLIENT_ID: "client-id",
+      GOOGLE_CLIENT_SECRET: "client-secret",
+      GOOGLE_CALLBACK_URL: `${BASE_URL}/api/auth/callback/google`,
+    });
+    expect(complete.options.socialProviders?.google).toMatchObject({
+      redirectURI: `${BASE_URL}/api/auth/callback/google`,
+      disableSignUp: true,
+    });
   });
 
   it("stores throttling in D1 and throttles repeated failed sign-ins", async () => {
@@ -187,18 +198,41 @@ describe("Better Auth runtime", () => {
       password: "correct horse battery staple",
     });
 
-    const form = new FormData();
+    const form = new URLSearchParams();
     form.set("email", INVITED_EMAIL);
     form.set("password", "correct horse battery staple");
     form.set("returnTo", "/desktop/authorize?request=ok");
     const response = await createControlApp().request(
       `${BASE_URL}/login`,
-      { method: "POST", body: form, headers: { "cf-connecting-ip": "192.0.2.70" } },
+      {
+        method: "POST",
+        body: form,
+        headers: { origin: BASE_URL, "cf-connecting-ip": "192.0.2.70" },
+      },
       authEnv as ControlEnv,
     );
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/desktop/authorize?request=ok");
     expect(response.headers.getSetCookie().join(", ")).toContain("__Host-zudo.session_token=");
+
+    const crossOrigin = await createControlApp().request(
+      `${BASE_URL}/login`,
+      { method: "POST", body: form, headers: { origin: "https://evil.test" } },
+      authEnv as ControlEnv,
+    );
+    expect(crossOrigin.status).toBe(403);
+    expect(crossOrigin.headers.getSetCookie()).toEqual([]);
+
+    const oversized = new URLSearchParams({
+      email: `${"x".repeat(17_000)}@example.test`,
+      password: "password",
+    });
+    const oversizedResponse = await createControlApp().request(
+      `${BASE_URL}/login`,
+      { method: "POST", body: oversized, headers: { origin: BASE_URL } },
+      authEnv as ControlEnv,
+    );
+    expect(oversizedResponse.status).toBe(413);
   });
 });
 

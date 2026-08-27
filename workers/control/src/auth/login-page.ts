@@ -1,4 +1,69 @@
 const DEFAULT_RETURN_TO = "/";
+const MAX_LOGIN_FORM_BYTES = 16 * 1024;
+
+export class LoginFormError extends Error {
+  readonly status: 400 | 413;
+
+  constructor(message: string, status: 400 | 413 = 400) {
+    super(message);
+    this.name = "LoginFormError";
+    this.status = status;
+  }
+}
+
+export function hasSameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  return origin !== null && origin === new URL(request.url).origin;
+}
+
+export async function readLoginForm(request: Request): Promise<URLSearchParams> {
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "application/x-www-form-urlencoded") {
+    throw new LoginFormError("Login form must be URL encoded");
+  }
+
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength !== null) {
+    if (!/^\d+$/u.test(declaredLength)) throw new LoginFormError("Invalid Content-Length");
+    if (Number(declaredLength) > MAX_LOGIN_FORM_BYTES) {
+      throw new LoginFormError("Login form is too large", 413);
+    }
+  }
+
+  if (request.body === null) return new URLSearchParams();
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const chunks: string[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_LOGIN_FORM_BYTES) {
+        try {
+          await reader.cancel("Login form is too large");
+        } catch {
+          // Preserve the stable size error if stream cancellation itself fails.
+        }
+        throw new LoginFormError("Login form is too large", 413);
+      }
+      try {
+        chunks.push(decoder.decode(value, { stream: true }));
+      } catch {
+        throw new LoginFormError("Login form must be valid UTF-8");
+      }
+    }
+    try {
+      chunks.push(decoder.decode());
+    } catch {
+      throw new LoginFormError("Login form must be valid UTF-8");
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return new URLSearchParams(chunks.join(""));
+}
 
 export function safeReturnTo(value: string | null | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {

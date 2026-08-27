@@ -1,5 +1,5 @@
-import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { betterAuth } from "better-auth/minimal";
 
 import { authSchema } from "../db/auth-schema.js";
 import { createControlDatabase } from "../db/database.js";
@@ -41,12 +41,11 @@ function requiredSetting(value: string | undefined, name: string): string {
   return normalized;
 }
 
-function googleProvider(env: AuthRuntimeEnv) {
+function googleProvider(env: AuthRuntimeEnv, baseURL: string) {
   const clientId = env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = env.GOOGLE_CLIENT_SECRET?.trim();
   const callbackURL = env.GOOGLE_CALLBACK_URL?.trim();
-  const baseURL = env.BETTER_AUTH_BASE_URL?.replace(/\/$/, "");
-  const expectedCallback = baseURL ? `${baseURL}/api/auth/callback/google` : undefined;
+  const expectedCallback = `${baseURL.replace(/\/$/, "")}/api/auth/callback/google`;
 
   if (!clientId || !clientSecret || !callbackURL || callbackURL !== expectedCallback) return {};
   return {
@@ -71,10 +70,13 @@ function googleProvider(env: AuthRuntimeEnv) {
 export function createAuth(env: AuthRuntimeEnv, options: CreateAuthOptions = {}) {
   const secret = requiredSetting(env.BETTER_AUTH_SECRET, "BETTER_AUTH_SECRET");
   const baseURL = requiredSetting(env.BETTER_AUTH_BASE_URL, "BETTER_AUTH_BASE_URL");
+  const trustedOrigins = commaSeparated(
+    requiredSetting(env.BETTER_AUTH_TRUSTED_ORIGINS, "BETTER_AUTH_TRUSTED_ORIGINS"),
+  );
   return betterAuth({
     secret,
     baseURL,
-    trustedOrigins: commaSeparated(env.BETTER_AUTH_TRUSTED_ORIGINS),
+    trustedOrigins,
     database: drizzleAdapter(createControlDatabase(env.DB), {
       provider: "sqlite",
       schema: authSchema,
@@ -84,7 +86,7 @@ export function createAuth(env: AuthRuntimeEnv, options: CreateAuthOptions = {})
       disableSignUp: !options.enableInvitedEmailSignUp,
       requireEmailVerification: false,
     },
-    socialProviders: googleProvider(env),
+    socialProviders: googleProvider(env, baseURL),
     databaseHooks: {
       user: {
         create: {

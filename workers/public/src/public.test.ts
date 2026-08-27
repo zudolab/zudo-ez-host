@@ -530,7 +530,7 @@ describe("public Worker publication topology", () => {
 
   it("publishes, reuses, rejects stale commits, and serves through the real resolver", async () => {
     const token = await seedE2eMachine();
-    const registration = await controlRequest(token, "/projects", {
+    const registration = await controlRequest(token, "/api/projects", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ slug: "site", displayName: "E2E site" }),

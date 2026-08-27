@@ -12,6 +12,7 @@ import {
 import { createControlDatabase } from "../db/database.js";
 import { getOwnedProject } from "../db/queries.js";
 import { readBoundedJsonRequest, RequestBodyError } from "../http/request-body.js";
+import { listOwnedProjects } from "./queries.js";
 import {
   ProjectRegistrationError,
   registerProject,
@@ -87,6 +88,15 @@ const projectAuthMiddleware: MiddlewareHandler<ProjectRouteEnv> = createMiddlewa
 
 const router = new Hono<ProjectRouteEnv>();
 
+router.get("/", exactControlCorsMiddleware, async (context) => {
+  const session = await authenticateSession(context.req.raw, context.env);
+  if (session === null) {
+    return context.json({ error: "session_authentication_required" }, 401, NO_STORE_HEADERS);
+  }
+  const projects = await listOwnedProjects(context.env.DB, session.userId);
+  return context.json({ projects }, 200, NO_STORE_HEADERS);
+});
+
 router.post("/", exactControlCorsMiddleware, projectAuthMiddleware, async (context) => {
   const owner = context.get(PROJECT_AUTH_CONTEXT_KEY);
 
@@ -126,7 +136,11 @@ router.post("/", exactControlCorsMiddleware, projectAuthMiddleware, async (conte
       }
       return context.json(
         { error: error.code, reason: error.reason },
-        error.code === "owner_not_found" || error.code === "invalid_owner_context" ? 401 : 400,
+        error.code === "owner_not_found" || error.code === "invalid_owner_context"
+          ? 401
+          : error.code === "owner_handle_unclaimed"
+            ? 409
+            : 400,
         NO_STORE_HEADERS,
       );
     }

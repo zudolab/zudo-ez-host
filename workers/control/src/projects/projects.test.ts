@@ -21,6 +21,7 @@ import {
   type ProjectOwnerContext,
   type ProjectRegistrationInput,
 } from "./index.js";
+import { listOwnedProjects } from "./queries.js";
 import { resolveProjectByLabel } from "./resolution.js";
 
 const NOW = 1_700_000_000_000;
@@ -32,7 +33,10 @@ beforeEach(async () => {
   await applyControlMigrations(env.DB, inject("controlMigrations"));
 });
 
-async function seedOwner(id = "usr_test", canonicalHandle = "owner"): Promise<ProjectOwnerContext> {
+async function seedOwner(
+  id = "usr_test",
+  canonicalHandle: string | null = "owner",
+): Promise<ProjectOwnerContext> {
   const database = createControlDatabase(env.DB);
   await seedUser(database, { id, canonicalHandle, createdAt: NOW });
   return { userId: id };
@@ -310,6 +314,67 @@ describe("project label resolution", () => {
   });
 });
 
+describe("project visibility", () => {
+  it("lists only the owner projects with current head and publication attribution", async () => {
+    const owner = await seedOwner("usr_visibility", "visibility");
+    const other = await seedOwner("usr_visibility_other", "other");
+    const published = await registerProject(env.DB, owner, { slug: "published" }, { now: NOW });
+    const draft = await registerProject(env.DB, owner, { slug: "draft" }, { now: NOW + 1 });
+    await registerProject(env.DB, other, { slug: "private" }, { now: NOW });
+    const database = createControlDatabase(env.DB);
+    const machine = await seedMachine(database, {
+      id: "mch_visibility",
+      userId: owner.userId,
+      name: "Visibility Mac",
+      credentialHashSha256: "visibility-machine-hash",
+      credentialPrefix: "zeh_machine_v1_",
+      credentialVersion: 1,
+      createdAt: NOW,
+      expiresAt: NOW + YEAR_MS,
+    });
+    await publishProject(published.project.id, owner.userId, machine.id);
+
+    await expect(listOwnedProjects(env.DB, owner.userId)).resolves.toEqual([
+      {
+        id: published.project.id,
+        slug: "published",
+        displayName: "published",
+        description: null,
+        status: "active",
+        createdAt: NOW,
+        updatedAt: NOW,
+        hostname: "published--visibility",
+        generation: 1,
+        machineNameSnapshot: "Test Mac",
+        publishedAt: NOW + 2,
+      },
+      {
+        id: draft.project.id,
+        slug: "draft",
+        displayName: "draft",
+        description: null,
+        status: "active",
+        createdAt: NOW + 1,
+        updatedAt: NOW + 1,
+        hostname: "draft--visibility",
+        generation: 0,
+        machineNameSnapshot: null,
+        publishedAt: null,
+      },
+    ]);
+  });
+
+  it("rejects registration for an account without a claimed handle", async () => {
+    const owner = await seedOwner("usr_unclaimed", null);
+
+    await expect(
+      registerProject(env.DB, owner, { slug: "site" }, { now: NOW }),
+    ).rejects.toMatchObject({
+      code: "owner_handle_unclaimed",
+    });
+  });
+});
+
 describe("project registration route", () => {
   it("requires an exact Origin before attempting browser-session authentication", async () => {
     const response = await app.request(
@@ -397,6 +462,64 @@ describe("project registration route", () => {
       authEnv,
     );
     expect(otherRead.status).toBe(404);
+  });
+
+  it("lists only the browser session owner's projects", async () => {
+    const authEnv = sessionRuntimeEnv("list-browser@example.test");
+    const browser = await createBrowserSession(authEnv, "list-browser@example.test", "listbrowser");
+    const own = await registerProject(
+      env.DB,
+      { userId: browser.userId },
+      { slug: "visible" },
+      { now: NOW },
+    );
+    const other = await seedOwner("usr_list_other", "listother");
+    const otherProject = await registerProject(env.DB, other, { slug: "hidden" }, { now: NOW });
+
+    const response = await createControlApp().request(
+      `${BASE_URL}/api/projects`,
+      { headers: { cookie: browser.cookie } },
+      authEnv,
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json<{
+      projects: Array<{ id: string; hostname: string | null; generation: number }>;
+    }>();
+    expect(body.projects).toEqual([
+      expect.objectContaining({
+        id: own.project.id,
+        hostname: "visible--listbrowser",
+        generation: 0,
+      }),
+    ]);
+    expect(body.projects.some(({ id }) => id === otherProject.project.id)).toBe(false);
+  });
+
+  it("returns a stable conflict when the browser owner has not claimed a handle", async () => {
+    const authEnv = sessionRuntimeEnv("unclaimed-browser@example.test");
+    const browser = await createBrowserSession(
+      authEnv,
+      "unclaimed-browser@example.test",
+      "Unclaimed User",
+    );
+    await env.DB.prepare("UPDATE user SET canonical_handle = NULL WHERE id = ?")
+      .bind(browser.userId)
+      .run();
+    const response = await createControlApp().request(
+      `${BASE_URL}/api/projects`,
+      {
+        method: "POST",
+        headers: {
+          cookie: browser.cookie,
+          origin: BASE_URL,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ slug: "site" }),
+      },
+      authEnv,
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "owner_handle_unclaimed" });
   });
 
   it("does not let a browser session cross the machine-only publish boundary", async () => {

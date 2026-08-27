@@ -13,7 +13,7 @@
     "build": "pnpm -r --if-present build",
     "preview": "pnpm -r --if-present preview",
     "// ── Quality ──────────────────────────": "",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "test": "vitest run",
     "check:doc:i18n": "pnpm --dir doc run check:i18n",
@@ -29,7 +29,8 @@
     "init-worktree": "bash scripts/install-git-hooks.sh"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260403.1",
+    "@cloudflare/vitest-plugin": "^1.1.1",
+    "@cloudflare/workers-types": "^5.20260827.1",
     "@types/node": "^22.0.0",
     "eslint": "^10.9.1",
     "lefthook": "^1.13.6",
@@ -37,6 +38,6 @@
     "prettier": "^3.9.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.11"
   }
 }

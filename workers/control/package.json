@@ -1,0 +1,19 @@
+{
+  "name": "@zudo-ez-host/control-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler types src/worker-configuration.d.ts --env-interface ControlEnv --include-runtime false --check && wrangler deploy --dry-run --config wrangler.toml",
+    "build:test-auxiliary": "wrangler deploy src/publication-resolver.ts --dry-run --config wrangler.toml --outdir .vitest/control",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zudo-ez-host/core": "workspace:*",
+    "hono": "^4.13.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.0"
+  }
+}

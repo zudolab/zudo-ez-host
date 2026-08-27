@@ -28,6 +28,7 @@
     "lib/**/*",
     "src/**/*",
     "packages/*/src/**/*",
+    "vitest.config.ts",
     "eslint.config.js",
     "zfb.config.ts"
   ],

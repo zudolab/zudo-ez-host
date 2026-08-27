@@ -39,6 +39,9 @@ export default defineProject({
             bindings: {
               BETTER_AUTH_BASE_URL: "https://control.test",
               BETTER_AUTH_TRUSTED_ORIGINS: "https://control.test",
+              // Test-only values; production secrets stay out of Wrangler vars.
+              BETTER_AUTH_SECRET: "identity-flow-test-secret-0123456789abcdef0123456789abcdef",
+              SIGNUP_ALLOWED_EMAILS: "identity-flow@example.test",
             },
             d1Databases: { DB: "zudo-ez-host-control-local" },
             r2Buckets: { ARTIFACTS: "zudo-ez-host-artifacts-local" },

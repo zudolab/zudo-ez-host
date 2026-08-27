@@ -7,8 +7,11 @@ This app is under development. NEVER consider backward compatibility until relea
 ## Status
 
 The bootstrap and specification phase is complete. First-party packages under
-`packages/*` are now in scope. Workers, `wrangler.toml`, and deploy-specific
-dependencies remain deferred to the Workers epic.
+`packages/*` and the identity foundation under `workers/*` are now in scope.
+Invited email/password accounts, canonical handles, named-machine enrollment,
+and machine-scoped publication authorization have landed. Production Workers
+deployment configuration and deploy-specific dependencies remain deferred to
+the Workers epic.
 
 ## Tech stack
 

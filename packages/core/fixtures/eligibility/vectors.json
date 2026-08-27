@@ -1,0 +1,474 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "ordinary paths are included by default",
+      "ignoreFile": "",
+      "path": "index.html",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "hard ignore wins over a negation for DS Store",
+      "ignoreFile": "!.DS_Store",
+      "path": "assets/.DS_Store",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": ".DS_Store"
+      }
+    },
+    {
+      "id": "AppleDouble files are hard ignored at every depth",
+      "ignoreFile": "!._icon.png",
+      "path": "assets/._icon.png",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": "._*"
+      }
+    },
+    {
+      "id": "Icon carriage-return metadata is hard ignored",
+      "ignoreFile": "!Icon\u000d",
+      "path": "assets/Icon\u000d",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": "Icon\u000d"
+      }
+    },
+    {
+      "id": "Spotlight metadata is hard ignored",
+      "ignoreFile": "!.Spotlight-V100",
+      "path": "metadata/.Spotlight-V100/store",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": ".Spotlight-V100"
+      }
+    },
+    {
+      "id": "Trash metadata is hard ignored",
+      "ignoreFile": "!.Trashes",
+      "path": ".Trashes/ignored.txt",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": ".Trashes"
+      }
+    },
+    {
+      "id": "Windows thumbnail metadata is hard ignored",
+      "path": "assets/Thumbs.db",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": "Thumbs.db"
+      }
+    },
+    {
+      "id": "Windows desktop metadata is hard ignored",
+      "path": "assets/desktop.ini",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": "desktop.ini"
+      }
+    },
+    {
+      "id": "git metadata directory and descendants are hard ignored",
+      "ignoreFile": "!.git/**",
+      "path": ".git/config",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": ".git/"
+      }
+    },
+    {
+      "id": "Mercurial metadata directory is hard ignored",
+      "path": "vendor/.hg/store/data",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": ".hg/"
+      }
+    },
+    {
+      "id": "Subversion metadata directory is hard ignored",
+      "path": "vendor/.svn/entries",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": ".svn/"
+      }
+    },
+    {
+      "id": "root dot-prefixed path is excluded",
+      "ignoreFile": "!.env",
+      "path": ".env",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "dot_prefix",
+        "pattern": ".env"
+      }
+    },
+    {
+      "id": "nested dot-prefixed segment is excluded",
+      "ignoreFile": "!**/.editor/config",
+      "path": "project/.editor/config",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "dot_prefix",
+        "pattern": ".editor"
+      }
+    },
+    {
+      "id": "well-known remains excluded while the V1 allowlist is empty",
+      "ignoreFile": "!.well-known/**",
+      "path": ".well-known/security.txt",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "dot_prefix",
+        "pattern": ".well-known"
+      }
+    },
+    {
+      "id": "comments and blank lines do not become rules",
+      "ignoreFile": "# generated files\n\n  \n*.tmp",
+      "path": "cache/output.tmp",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "*.tmp",
+        "line": 4
+      }
+    },
+    {
+      "id": "star is a segment-local wildcard",
+      "ignoreFile": "assets/*.map",
+      "path": "assets/app.map",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "assets/*.map",
+        "line": 1
+      }
+    },
+    {
+      "id": "a segment-local star does not cross a slash",
+      "ignoreFile": "assets/*",
+      "path": "assets/css/app.css",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "slash-bearing patterns are rooted at the ignore-file root",
+      "ignoreFile": "assets/*.map",
+      "path": "nested/assets/app.map",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "question matches exactly one path character",
+      "ignoreFile": "image?.png",
+      "path": "images/image1.png",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "image?.png",
+        "line": 1
+      }
+    },
+    {
+      "id": "question does not match two path characters",
+      "ignoreFile": "image?.png",
+      "path": "images/image12.png",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "leading globstar matches a file at any depth",
+      "ignoreFile": "**/*.log",
+      "path": "app.log",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "**/*.log",
+        "line": 1
+      }
+    },
+    {
+      "id": "globstar matches multiple nested directories",
+      "ignoreFile": "**/*.log",
+      "path": "logs/2026/august/app.log",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "**/*.log",
+        "line": 1
+      }
+    },
+    {
+      "id": "middle globstar can consume zero or more directories",
+      "ignoreFile": "a/**/secret.txt",
+      "path": "a/x/y/secret.txt",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "a/**/secret.txt",
+        "line": 1
+      }
+    },
+    {
+      "id": "directory globstar matches descendants",
+      "ignoreFile": "cache/**",
+      "path": "cache/a/b/data.bin",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "cache/**",
+        "line": 1
+      }
+    },
+    {
+      "id": "a lone globstar matches every path",
+      "ignoreFile": "**",
+      "path": "deep/path/file.txt",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "**",
+        "line": 1
+      }
+    },
+    {
+      "id": "trailing slash matches a directory and descendants",
+      "ignoreFile": "dist/",
+      "path": "dist/assets/app.js",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "dist/",
+        "line": 1
+      }
+    },
+    {
+      "id": "unanchored directory rule matches a directory at any depth",
+      "ignoreFile": "dist/",
+      "path": "release/dist/assets/app.js",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "dist/",
+        "line": 1
+      }
+    },
+    {
+      "id": "leading slash anchors a directory rule at the root",
+      "ignoreFile": "/build/",
+      "path": "build/app.js",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "/build/",
+        "line": 1
+      }
+    },
+    {
+      "id": "root-anchored directory rule does not match nested directory",
+      "ignoreFile": "/build/",
+      "path": "release/build/app.js",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "negation restores an ordinary path",
+      "ignoreFile": "*.log\n!important.log",
+      "path": "logs/important.log",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "ezhostignore",
+        "pattern": "!important.log",
+        "line": 2
+      }
+    },
+    {
+      "id": "last matching rule wins",
+      "ignoreFile": "*.log\n!important.log\nimportant.log",
+      "path": "logs/important.log",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "important.log",
+        "line": 3
+      }
+    },
+    {
+      "id": "negation cannot resurrect a dot-prefixed path",
+      "ignoreFile": "*\n!public/.env",
+      "path": "public/.env",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "dot_prefix",
+        "pattern": ".env"
+      }
+    },
+    {
+      "id": "negation cannot resurrect a VCS path",
+      "ignoreFile": "**\n!.git/config",
+      "path": ".git/config",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "hard_ignore",
+        "pattern": ".git/"
+      }
+    },
+    {
+      "id": "directory ignore can be narrowed by a later negation",
+      "ignoreFile": "build/\n!build/keep.txt",
+      "path": "build/keep.txt",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "ezhostignore",
+        "pattern": "!build/keep.txt",
+        "line": 2
+      }
+    },
+    {
+      "id": "directory ignore still excludes other descendants",
+      "ignoreFile": "build/\n!build/keep.txt",
+      "path": "build/drop.txt",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "build/",
+        "line": 1
+      }
+    },
+    {
+      "id": "character classes are literal text",
+      "ignoreFile": "file[ab].txt",
+      "path": "file[ab].txt",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "file[ab].txt",
+        "line": 1
+      }
+    },
+    {
+      "id": "character classes do not become wildcards",
+      "ignoreFile": "file[ab].txt",
+      "path": "filea.txt",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "literal backslash pattern does not wildcard-match",
+      "ignoreFile": "foo\\*.txt",
+      "path": "fooX.txt",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "brace expansion is literal while star remains supported",
+      "ignoreFile": "*.{js,ts}",
+      "path": "src/app.{js,ts}",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "*.{js,ts}",
+        "line": 1
+      }
+    },
+    {
+      "id": "brace syntax does not match a plain extension",
+      "ignoreFile": "*.{js,ts}",
+      "path": "src/app.js",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "default_allow"
+      }
+    },
+    {
+      "id": "hash inside a pattern is literal text",
+      "ignoreFile": "foo#bar.txt",
+      "path": "foo#bar.txt",
+      "expected": {
+        "eligible": false,
+        "decision": "ignore",
+        "rule": "ezhostignore",
+        "pattern": "foo#bar.txt",
+        "line": 1
+      }
+    },
+    {
+      "id": "CRLF ignore files preserve deciding line numbers",
+      "ignoreFile": "*.tmp\r\n!important.tmp\r\n",
+      "path": "important.tmp",
+      "expected": {
+        "eligible": true,
+        "decision": "publish",
+        "rule": "ezhostignore",
+        "pattern": "!important.tmp",
+        "line": 2
+      }
+    }
+  ]
+}

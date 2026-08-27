@@ -185,6 +185,32 @@ export const machines = sqliteTable(
   ],
 );
 
+export const desktopAuthorizationCodes = sqliteTable(
+  "desktop_authorization_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    redirectUri: text("redirect_uri").notNull(),
+    codeChallenge: text("code_challenge").notNull(),
+    codeChallengeMethod: text("code_challenge_method", { enum: ["S256"] }).notNull(),
+    scope: text("scope", { enum: ["publish"] }).notNull(),
+    machineName: text("machine_name").notNull(),
+    machineId: text("machine_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    consumedAt: integer("consumed_at"),
+  },
+  (table) => [
+    uniqueIndex("desktop_authorization_codes_machine_id_unique").on(table.machineId),
+    index("desktop_authorization_codes_user_id_idx").on(table.userId),
+    check("desktop_authorization_codes_method_s256", sql`${table.codeChallengeMethod} = 'S256'`),
+    check("desktop_authorization_codes_scope_publish", sql`${table.scope} = 'publish'`),
+    check("desktop_authorization_codes_expiry", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+);
+
 export const projects = sqliteTable(
   "projects",
   {
@@ -437,6 +463,7 @@ export const publicationObjects = sqliteTable(
 export const schema = {
   accountRelations,
   accounts,
+  desktopAuthorizationCodes,
   hostnameAllocations,
   machines,
   projectHeads,
@@ -460,6 +487,7 @@ export type Account = typeof accounts.$inferSelect;
 export type Verification = typeof verifications.$inferSelect;
 export type RateLimit = typeof rateLimits.$inferSelect;
 export type Machine = typeof machines.$inferSelect;
+export type DesktopAuthorizationCode = typeof desktopAuthorizationCodes.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type HostnameAllocation = typeof hostnameAllocations.$inferSelect;
 export type PublicationAttempt = typeof publicationAttempts.$inferSelect;

@@ -116,7 +116,12 @@ export function createControlApp(options: ControlAppOptions = {}): Hono<ControlA
   });
   mountSessionBoundary(app, "/api/account");
   mountSessionBoundary(app, "/api/machines");
-  mountSessionBoundary(app, "/desktop/authorize");
+  app.use("/desktop/*", async (context, next) => {
+    await next();
+    context.header("Cache-Control", "no-store");
+  });
+  app.use("/desktop/authorize", exactControlCorsMiddleware);
+  app.use("/desktop/authorize", requireTrustedOriginMiddleware);
   app.route("/api/account", accountRouter);
   app.route("/api/machines", machinesRouter);
   app.route("/desktop", desktopRouter);

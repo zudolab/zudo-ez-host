@@ -36,6 +36,10 @@ export default defineProject({
             modulesRoot: controlAuxiliaryRoot,
             compatibilityDate: "2026-08-27",
             compatibilityFlags: ["nodejs_compat"],
+            bindings: {
+              BETTER_AUTH_BASE_URL: "https://control.test",
+              BETTER_AUTH_TRUSTED_ORIGINS: "https://control.test",
+            },
             d1Databases: { DB: "zudo-ez-host-control-local" },
             r2Buckets: { ARTIFACTS: "zudo-ez-host-artifacts-local" },
           },
@@ -48,6 +52,9 @@ export default defineProject({
     name: "public-worker",
     globalSetup: ["./vitest.global-setup.ts"],
     include: ["src/**/*.test.ts"],
+    // The topology test drives several real control-Worker publication calls.
+    // Keep a workerd-specific budget like the control integration project.
+    testTimeout: 30_000,
     provide: { controlMigrations },
   },
 });

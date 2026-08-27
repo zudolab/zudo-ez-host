@@ -21,6 +21,20 @@ export {
 } from "./paths/index.js";
 export type { CanonicalPath, PathRejectionReason, PortablePathCollision } from "./paths/index.js";
 export {
+  DOT_PREFIX_ALLOWLIST_V1,
+  HARD_IGNORE_APPLEDOUBLE_PREFIX,
+  HARD_IGNORE_DIRECTORY_NAMES,
+  HARD_IGNORE_FILE_NAMES,
+  PUBLISH_ELIGIBILITY_ALGORITHM_VERSION,
+  evaluatePublishEligibility,
+  isPublishEligible,
+} from "./eligibility/index.js";
+export type {
+  PublishEligibilityDecision,
+  PublishEligibilityResult,
+  PublishEligibilityRule,
+} from "./eligibility/index.js";
+export {
   DEFAULT_CONTENT_TYPE,
   MANIFEST_SCHEMA_VERSION,
   SERVING_SEMANTICS_VERSION,

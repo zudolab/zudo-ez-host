@@ -19,3 +19,21 @@ export {
   findPortablePathCollisionV1,
 } from "./paths/index.js";
 export type { CanonicalPath, PathRejectionReason, PortablePathCollision } from "./paths/index.js";
+export {
+  DEFAULT_CONTENT_TYPE,
+  MANIFEST_SCHEMA_VERSION,
+  SERVING_SEMANTICS_VERSION,
+  createManifestLookup,
+  decodeCanonical,
+  decodeManifest,
+  encodeCanonical,
+  normalizeContentType,
+  validateManifest,
+} from "./manifest/index.js";
+export type {
+  CanonicalManifestEntry,
+  Manifest,
+  ManifestValidationReason,
+  ValidatedManifest,
+  ValidatedManifestLookup,
+} from "./manifest/index.js";

@@ -10,6 +10,7 @@ export default [
       "**/.zudo-doc/",
       "worktrees/",
       ".wrangler/",
+      "**/.vitest/",
     ],
   },
   ...tseslint.configs.recommended.map((config) => ({
@@ -118,4 +119,5 @@ export default [
     },
   },
   { files: ["scripts/**", "**/*.test.ts"], rules: { "no-console": "off" } },
+  { files: ["**/vitest.global-setup.ts"], rules: { "no-console": "off" } },
 ];

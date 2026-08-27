@@ -1,0 +1,23 @@
+{
+  "name": "@zudo-ez-host/control-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler types src/worker-configuration.d.ts --env-interface ControlEnv --include-runtime false --check && wrangler deploy --dry-run --config wrangler.toml",
+    "build:test-auxiliary": "wrangler deploy src/test-auxiliary.ts --dry-run --config wrangler.toml --outdir .vitest/control",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zudo-ez-host/core": "workspace:*",
+    "aws4fetch": "1.0.20",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "wrangler": "^4.127.0"
+  }
+}

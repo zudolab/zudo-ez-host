@@ -1,0 +1,24 @@
+# Local development and workerd tests only. Production deployment configuration
+# will be introduced separately with explicit account resources and routes.
+name = "zudo-ez-host-public-local"
+main = "src/index.ts"
+compatibility_date = "2026-08-27"
+compatibility_flags = ["nodejs_compat"]
+
+# Deployment note: keep zone/default Workers caching disabled. Authorization
+# must execute in this Worker before its explicit Cache API lookup.
+[vars]
+PUBLIC_BASE_DOMAIN = "public.test"
+
+[cache]
+# The responder performs an authorization-first Cache API lookup itself.
+enabled = false
+
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "zudo-ez-host-artifacts-local"
+
+[[services]]
+binding = "CONTROL"
+service = "zudo-ez-host-control-local"
+entrypoint = "PublicationResolver"

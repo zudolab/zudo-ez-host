@@ -13,9 +13,24 @@ import {
   MAX_PRESIGNED_URL_ISSUANCES_PER_ACCOUNT_PER_MINUTE,
   MAX_RETAINED_AND_STAGED_BYTES_PER_ACCOUNT,
   MAX_UPLOAD_CONCURRENCY_PER_MACHINE,
+  MACHINE_TOKEN_PREFIX,
+  MACHINE_TOKEN_VERSION,
+  generateMachineToken,
+  parseMachineToken,
 } from "./index.js";
+import type { PublicationResolution } from "./index.js";
 
 describe("@zudo-ez-host/core", () => {
+  it("exports the publication resolution contract", () => {
+    const resolution: PublicationResolution = {
+      projectId: "project-fixture",
+      artifactHash: "sha256:fixture",
+      servingFlags: { spaFallback: true, gated: false },
+    };
+
+    expect(resolution.servingFlags).toEqual({ spaFallback: true, gated: false });
+  });
+
   it("executes in the root test lane", () => {
     expect({
       MAX_FILE_BYTES,
@@ -43,6 +58,15 @@ describe("@zudo-ez-host/core", () => {
       MAX_PREPARES_PER_ACCOUNT_PER_MINUTE: 5,
       MAX_COMMITS_PER_PROJECT_PER_MINUTE: 10,
       MAX_PRESIGNED_URL_ISSUANCES_PER_ACCOUNT_PER_MINUTE: 1_000,
+    });
+  });
+
+  it("exports the machine-token wire helpers from the core barrel", () => {
+    const parsed = parseMachineToken(generateMachineToken());
+
+    expect(parsed).toEqual({
+      ok: true,
+      value: { prefix: MACHINE_TOKEN_PREFIX, version: MACHINE_TOKEN_VERSION },
     });
   });
 });

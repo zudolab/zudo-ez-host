@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 
+import { accountRouter } from "./account/router.js";
 import {
   MACHINE_AUTH_PUBLISH_PATH,
   machineAuthMiddleware,
-  type MachineAuthEnv,
+  type MachineAuthVariables,
 } from "./auth/machine-auth.js";
+import { exactControlCorsMiddleware, requireTrustedOriginMiddleware } from "./auth/origin.js";
+import { sessionAuthMiddleware, type SessionAuthVariables } from "./auth/session-auth.js";
 import {
   hasSameOrigin,
   LoginFormError,
@@ -12,6 +15,8 @@ import {
   readLoginForm,
   safeReturnTo,
 } from "./auth/login-page.js";
+import { desktopRouter } from "./desktop/router.js";
+import { machinesRouter } from "./machines/router.js";
 import { projectsRouter } from "./projects/index.js";
 import {
   createPublicationContractsRouter,
@@ -29,13 +34,28 @@ export interface ControlAppOptions {
   readonly contracts?: PublicationContractsRouterOptions;
 }
 
+interface ControlAppEnv {
+  readonly Bindings: ControlEnv;
+  readonly Variables: MachineAuthVariables & SessionAuthVariables;
+}
+
+function mountSessionBoundary(app: Hono<ControlAppEnv>, path: string) {
+  for (const pattern of [path, `${path}/*`]) {
+    app.use(pattern, exactControlCorsMiddleware);
+    app.use(pattern, requireTrustedOriginMiddleware);
+    app.use(pattern, sessionAuthMiddleware);
+  }
+}
+
 /** Build the control app with deployment-owned publication dependencies. */
-export function createControlApp(options: ControlAppOptions = {}): Hono<MachineAuthEnv> {
-  const app = new Hono<MachineAuthEnv>();
+export function createControlApp(options: ControlAppOptions = {}): Hono<ControlAppEnv> {
+  const app = new Hono<ControlAppEnv>();
   const publicationPrepareRouter = createPublicationPrepareRouter(options.prepare);
   const publicationContractsRouter = createPublicationContractsRouter(options.contracts);
 
   app.route("/", healthRouter);
+  app.use("/login", exactControlCorsMiddleware);
+  app.use("/login", requireTrustedOriginMiddleware);
   app.get("/login", (context) => loginPageResponse(safeReturnTo(context.req.query("returnTo"))));
   app.post("/login", async (context) => {
     if (!hasSameOrigin(context.req.raw)) {
@@ -86,6 +106,7 @@ export function createControlApp(options: ControlAppOptions = {}): Hono<MachineA
       redirect.headers.append("set-cookie", cookie);
     return redirect;
   });
+  app.use("/api/auth/*", exactControlCorsMiddleware);
   app.all("/api/auth/*", async (context) => {
     const { createAuth } = await import("./auth/better-auth.js");
     const url = new URL(context.req.url);
@@ -93,9 +114,13 @@ export function createControlApp(options: ControlAppOptions = {}): Hono<MachineA
       context.req.method === "POST" && url.pathname === "/api/auth/sign-up/email";
     return createAuth(context.env, { enableInvitedEmailSignUp }).handler(context.req.raw);
   });
-  app.use("/projects", machineAuthMiddleware);
-  app.use("/projects/*", machineAuthMiddleware);
-  app.route("/projects", projectsRouter);
+  mountSessionBoundary(app, "/api/account");
+  mountSessionBoundary(app, "/api/machines");
+  mountSessionBoundary(app, "/desktop/authorize");
+  app.route("/api/account", accountRouter);
+  app.route("/api/machines", machinesRouter);
+  app.route("/desktop", desktopRouter);
+  app.route("/api/projects", projectsRouter);
   app.use(MACHINE_AUTH_PUBLISH_PATH, machineAuthMiddleware);
   app.route("/api/projects/:projectId/publish", publicationPrepareRouter);
   app.route("/api/projects/:projectId/publish", publicationContractsRouter);

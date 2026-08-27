@@ -114,7 +114,25 @@ describe("machine publish authentication", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       userId: user.id,
-      canonicalHandle: user.canonicalHandle,
+      machineId: machine.id,
+    });
+  });
+
+  it("does not require the separate canonical-handle claim", async () => {
+    const { token, user, machine } = await seedAuthenticatedMachine({
+      machineId: "mch_unclaimed",
+      userId: "usr_unclaimed",
+      canonicalHandle: "temporary",
+    });
+    await env.DB.prepare("UPDATE user SET canonical_handle = NULL WHERE id = ?")
+      .bind(user.id)
+      .run();
+
+    const response = await request(token);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      userId: user.id,
       machineId: machine.id,
     });
   });
@@ -197,7 +215,6 @@ describe("machine publish authentication", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       userId: ownerA.user.id,
-      canonicalHandle: ownerA.user.canonicalHandle,
       machineId: ownerA.machine.id,
     });
   });

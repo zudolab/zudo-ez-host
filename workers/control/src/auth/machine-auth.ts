@@ -18,16 +18,15 @@ export const MACHINE_AUTH_CONTEXT_KEY = "machineAuth" as const;
 export const MACHINE_AUTH_SCOPE = "project_publish" as const;
 
 /**
- * Publish endpoints are the only routes that may use machine credentials.
- * Project registration, account, and credential-management routes must use a
- * different authentication boundary when they are added.
+ * Machine credentials are limited to project and publish operations. Account
+ * and credential-management routes remain browser-session-only. See the
+ * identity ADR and `doc/src/content/docs/sync/mac-client.mdx`.
  */
 export const MACHINE_AUTH_PUBLISH_PATH = "/api/projects/:projectId/publish/*" as const;
 
 /** The owner identity downstream project and publication code may consume. */
 export interface MachineAuthContext {
   readonly userId: string;
-  readonly canonicalHandle: string;
   readonly machineId: string;
 }
 
@@ -160,15 +159,8 @@ export async function authenticateMachineToken(
 
   const user = await getUserById(database, machine.userId);
   if (user === undefined) {
-    // The schema's foreign key should make this unreachable. Treat any
-    // inconsistent row as unknown rather than exposing account state.
-    return errorResult("unknown_credential");
-  }
-
-  // Better Auth creates users before the separate handle-claim flow. Until
-  // publish auth stops carrying handles, an unclaimed account cannot form the
-  // existing publish identity and uses the same non-enumerating failure.
-  if (user.canonicalHandle === null) {
+    // The foreign key should make this unreachable. Keep the auth boundary
+    // fail-closed if storage is nevertheless inconsistent.
     return errorResult("unknown_credential");
   }
 
@@ -176,10 +168,20 @@ export async function authenticateMachineToken(
     ok: true,
     value: {
       userId: user.id,
-      canonicalHandle: user.canonicalHandle,
       machineId: machine.id,
     },
   };
+}
+
+/** Authenticate the complete HTTP bearer boundary without falling back to cookies. */
+export async function authenticateMachineRequest(
+  request: Request,
+  binding: D1Database,
+  now = Date.now(),
+): Promise<MachineAuthResult> {
+  const authorization = parseAuthorization(request);
+  if (!authorization.ok) return errorResult(authorization.reason);
+  return authenticateMachineToken(authorization.token, binding, now);
 }
 
 function unauthorizedResponse(
@@ -199,15 +201,7 @@ export function createMachineAuthMiddleware(
   const now = options.now ?? (() => Date.now());
 
   return createMiddleware<MachineAuthEnv>(async (context, next) => {
-    const authorization = parseAuthorization(context.req.raw);
-    if (!authorization.ok) {
-      return unauthorizedResponse(context, {
-        error: "machine_authentication_failed",
-        reason: authorization.reason,
-      });
-    }
-
-    const result = await authenticateMachineToken(authorization.token, context.env.DB, now());
+    const result = await authenticateMachineRequest(context.req.raw, context.env.DB, now());
     if (!result.ok) {
       return unauthorizedResponse(context, result.error);
     }

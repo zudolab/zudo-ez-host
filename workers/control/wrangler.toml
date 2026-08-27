@@ -9,6 +9,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "zudo-ez-host-control-local"
 database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "ARTIFACTS"

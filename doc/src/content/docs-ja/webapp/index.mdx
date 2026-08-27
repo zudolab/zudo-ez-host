@@ -1,0 +1,102 @@
+---
+title: Webapp とプロジェクト管理
+description: プロジェクト、設定、公開状態、マイルストーン別の提供範囲を扱う webapp 仕様です。
+sidebar_position: 30
+---
+
+## プロダクトの操作画面
+
+`zudo-ez-host.app` 上の認証済み webapp は、所有者自身のアカウント、machine、
+ホスト対象プロジェクトを管理する control surface です。アップロードされた site
+content は配信しません。各プロジェクトは別の public-content domain 上の static
+site であり、canonical URL は次の形式です。
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+webapp は公開状態と復旧操作を分かりやすく示しますが、one-way publisher を
+リモートファイルマネージャーにはしません。ローカルのプロジェクトディレクトリが
+引き続き source of truth です。webapp はファイル単位の編集、download、merge、
+cloud trash を提供しません。
+
+アカウントと machine の操作は[認証とアカウント](./auth-and-accounts.mdx)で、
+共有 preview の保護は[パスワードゲート](./password-gates.mdx)で定義します。
+
+## プロジェクト一覧
+
+プロジェクト一覧は所有者の範囲に限定され、signed-in account が所有するすべての
+プロジェクトを表示します。各行には、現在の配信状態を理解するために必要な次の情報を
+表示します。
+
+- live、unpublished、error のいずれかの状態
+- canonical public URL
+- 成功した最新の publication time（存在する場合）
+- その publication に記録された machine-name snapshot
+- ローカルでの対応が必要な error や、shared preview protection が off/enabled の
+  どちらかなど、対応可能な sync と password-gate の状態
+
+byte が upload 済みであっても、未公開または失敗した attempt を live として表示しては
+なりません。配信される site を決めるのは、atomic に promote された publication head
+だけです。そのため、現在 live な publication と、それより新しい失敗・競合中の attempt
+を区別して表示します。
+
+## プロジェクト詳細と設定
+
+プロジェクト詳細では canonical URL と live、unpublished、error のいずれかの状態を
+再掲します。更新状況の診断に必要な、成功した最新の publication time、publishing
+machine-name snapshot、対応可能な sync/gate status を示します。publication lifecycle
+で定義された retry guidance、deletion/takedown、そのマイルストーンで UI が有効になった
+場合の rollback などを表示できます。破壊的操作には明示的な確認が必要であり、ローカル
+ファイルまで削除されるかのように示してはなりません。
+
+設定に表示するのは、architecture で採用済みの次の control だけです。
+
+- プロジェクトの stable identity を変えない、決定済みの display metadata
+- immutable hostname と将来の alias policy の範囲内で許可された URL handling
+- 対象マイルストーンで有効になった場合の明示的な SPA fallback flag
+- プロジェクト単位の password gate
+- マイルストーンに適した lifecycle action
+
+SPA flag の default は off です。有効な場合も unmatched HTML navigation だけに作用し、
+見つからない asset-like request を `index.html` に変換しません。display metadata の
+rename で canonical URL は移動しません。alias behavior は deferred decision のため、
+webapp は hostname の編集や URL の再利用を約束してはなりません。
+
+この画面には project role、team、billing、paid plan、plan entitlement を追加しません。
+これらは initial product の project setting として決定されていません。
+
+## 公開状態と machine の表示
+
+promote された各 publication には stable machine ID、user-editable machine name の
+snapshot、publication time、project head になった artifact が記録されます。webapp は
+この snapshot を「どの machine が最後にこのプロジェクトを更新したか」への回答として
+表示します。
+
+machine を rename しても変更されるのは将来の publication で使う名前だけです。過去の
+publication attribution は変わらないため、rename 後に最新または retained publication
+record を書き換えてはなりません。古い machine が新しい head を置き換えようとした場合、
+status surface は新しい generation と publishing machine を示し、Mac app での rescan と
+明示的な overwrite confirmation へ案内します。暗黙の last-writer-wins は行いません。
+
+sync と gate の status は、曖昧な health badge 一つではなく対応可能な形で示します。
+特に publication error、unpublished state、stale-head conflict、gate enablement は別々の
+状態です。
+
+## マイルストーン別の提供範囲
+
+information architecture は将来の control を見越せますが、設定可能または設計済みの
+capability を提供済みとして表示してはなりません。
+
+- **M1 — personal MVP:** invited account 1 件、email/password login、基本的な own
+  profile と project visibility、machine attribution、revoke-machine action。完全な
+  security path が準備できるまで password-gate control は提供しません。
+- **M2 — multi-user service:** public signup、password login と並ぶ Google の提供、
+  owner-isolated project setting、default-off password gate、rollback UI、別途承認された
+  場合だけの URL alias policy。
+- **M3 — commercial distribution:** paid plan、billing と entitlement、plan-aware quota、
+  より広い administration、support/audit tooling、formal retention policy。
+
+password-gate UI を最初に公開する正確なマイルストーンは open question です。roadmap
+上は M2 に置かれていますが、verifier、capability、rate-limit、cache path の準備完了が
+有効化の前提です。

@@ -1,0 +1,42 @@
+{
+  "name": "zudo-ez-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "// ── Core ─────────────────────────────": "",
+    "dev": "pnpm -r --if-present dev",
+    "build": "pnpm -r --if-present build",
+    "preview": "pnpm -r --if-present preview",
+    "// ── Quality ──────────────────────────": "",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
+    "check:doc:i18n": "pnpm --dir doc run check:i18n",
+    "check:doc:links": "pnpm --dir doc run check:links -- --strict-broken --strict-absolute --strict-anchors --strict-trailing",
+    "b4push": "bash scripts/run-b4push.sh",
+    "verify": "bash scripts/run-b4push.sh",
+    "// ── Format ───────────────────────────": "",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "format:md": "pnpm dlx @takazudo/mdx-formatter --write .",
+    "// ── Lifecycle ────────────────────────": "",
+    "prepare": "lefthook install && bash scripts/install-git-hooks.sh",
+    "init-worktree": "bash scripts/install-git-hooks.sh"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260403.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.9.1",
+    "lefthook": "^1.13.6",
+    "preact": "^10.29.1",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}

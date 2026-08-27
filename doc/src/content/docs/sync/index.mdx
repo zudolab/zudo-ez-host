@@ -1,0 +1,139 @@
+---
+title: Sync protocol
+description: The one-way manifest protocol, atomic publication, and concurrency rules.
+sidebar_position: 1
+---
+
+## Protocol goals
+
+The selected local project directory is the source of truth. Sync is one-way
+publication: the client describes the complete local result, uploads missing
+bytes, and promotes that result as one immutable publication. The protocol does
+not download remote files, merge edits, or propagate per-file cloud trash.
+
+Watcher events are hints, not authoritative operations. A full manifest makes
+the desired live state explicit, recovers from missed events, and allows
+unchanged content to be reused by hash. The public site continues to serve its
+previous publication until a complete new artifact is committed.
+
+## Canonical manifest
+
+The client submits a versioned manifest sorted by normalized relative path.
+Each entry contains:
+
+- a normalized `path` using `/` and Unicode NFC;
+- the file's SHA-256 hash;
+- `size` in bytes;
+- a high-resolution local mtime hint used only by the client's hash cache; and
+- a platform-derived `contentType` that is retained for deterministic serving.
+
+The server compares content by SHA-256, never by mtime. When hashing, the client
+opens the file and then confirms that its size and mtime have not changed. If
+they changed, the project is marked dirty and scanned again rather than
+publishing a mixed snapshot.
+
+Paths have no leading slash, empty segment, `.` or `..` segment, NUL, or
+backslash. The scan rejects malformed paths and reports both local names for
+portable case-folding or Unicode-normalization collisions. Symlinks are
+reported and never followed or published.
+
+Hard ignores are `.DS_Store`, `.git/`, `.hg/`, `.svn/`, and app metadata. A
+root `.ezhostignore` adds documented gitignore-style rules but cannot restore a
+hard-ignored path. It does not imply that directories such as `node_modules/`
+are ignored. Independently of matching, the V1 serving policy excludes every
+dot-prefixed path segment; a future exact allowlist may admit safe
+`.well-known/*` paths, but the manifest must not weaken the serving boundary.
+
+## Prepare, upload, and commit
+
+Publication has three phases:
+
+1. `prepare` validates the canonical manifest, reserves quota, creates an
+   expiring attempt, and captures the current `baseGeneration`. Its response
+   contains only missing content hashes and their upload contracts.
+2. The client uploads the missing bytes to immutable, project-scoped,
+   content-addressed R2 objects. Each presigned `PUT` is valid for 10 minutes
+   and is issued only after the authenticated control Worker authorizes the
+   attempt. It signs the exact key, method, content type, and supported MD5
+   transport checksum. After all referenced objects pass completeness checks,
+   the service writes the canonical artifact manifest under its own hash.
+3. An idempotent `commit` verifies the attempt and atomically advances the D1
+   project head only if its generation still equals `baseGeneration`. The same
+   transaction records the artifact hash, stable machine ID, machine-name
+   snapshot, file and byte counts, and publication time.
+
+Visibility changes only in the final compare-and-swap. The public responder
+reads only the promoted artifact, so uploads, retries, and abandoned attempts
+can never expose a half-uploaded or mixed site. Repeating an immutable upload or
+an idempotent commit is safe.
+
+## Deletion and rollback
+
+The submitted manifest is the complete next live site. Omitting a path removes
+it only from the next promoted publication; the service never deletes the
+corresponding local file. A rename is a remove plus an add at the path layer,
+and unchanged bytes reuse the existing hash without another upload.
+
+There is no per-file cloud trash. Promoted publications are retained for a
+provisional 30-day whole-site rollback window. Project deletion and longer-term
+retention are separate lifecycle operations, not sync commands.
+
+## Multi-machine concurrency
+
+Optimistic concurrency is the correctness rule. If another machine advances
+the head after `prepare`, `commit` returns `409 publication_head_changed` with
+the newer generation and publishing machine name. The client must rescan and
+obtain explicit user confirmation before preparing an overwrite against that
+new generation. It must not silently use last-writer-wins.
+
+A short, expiring commit-only lease may serialize verification and promotion.
+It never spans file uploads, so a sleeping, disconnected, or crashed publisher
+cannot hold an upload-length lock.
+
+Every committed publication stamps the stable machine ID and the machine name
+at publication time. Renaming a machine affects future stamps only; historical
+attribution does not change. The webapp displays the recorded publishing
+machine for each project and publication.
+
+## Quotas and abuse controls
+
+The provisional V1 limits are binding until a later architecture decision
+supersedes them:
+
+| Limit                                      |                 V1 value |
+| ------------------------------------------ | -----------------------: |
+| File                                       |                  100 MiB |
+| Project/artifact                           |   20,000 files and 2 GiB |
+| Active published data/account              |                   10 GiB |
+| Retained plus staged physical data/account |                   20 GiB |
+| Canonical manifest body                    |                   10 MiB |
+| Open attempts                              | 3/project and 20/account |
+| Client upload concurrency                  |           8 PUTs/machine |
+
+D1 transactionally owns exact quota reservation, byte/file accounting, and
+open-attempt limits. Eventually consistent rate limiting is only abuse
+damping; it is not a global quota or billing counter. The initial configurable
+ceilings are 5 prepares per account per minute, 10 commits per project per
+minute, and 1,000 presigned-URL issuances per account per minute.
+
+V1 has no multipart upload because one file is limited to 100 MiB. Before
+promotion, the service verifies object length, supported transport integrity,
+attempt ownership, and completeness. A presigned `PUT` does not prove that the
+claimed SHA-256 label matches the uploaded bytes; server-side SHA-256
+recomputation remains deferred and must not be implied by transport checks.
+
+## Failure recovery
+
+An interrupted scan or a file changing during hashing marks the project dirty
+and triggers another reconciliation. An expired upload contract can be
+refreshed only for its still-open authenticated attempt. Failed preparation,
+upload, or commit leaves the current public head unchanged; unreachable
+immutable staging objects can be collected later after attempt and safety
+windows expire.
+
+On launch, wake, sync-root change, watcher error or overflow, and a periodic
+safety pass, the client performs a complete scan. Ordinary filesystem events
+use the batching behavior described in the [Mac client](/docs/sync/mac-client).
+Stale commits follow the explicit rescan-and-confirm flow above. Recovery of a
+bad but successfully promoted site uses a retained whole publication, never a
+remote per-file merge or trash restoration.

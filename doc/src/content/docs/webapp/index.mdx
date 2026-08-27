@@ -1,0 +1,108 @@
+---
+title: Webapp and project management
+description: The webapp surface for projects, settings, publication status, and milestone availability.
+sidebar_position: 30
+---
+
+## Product surface
+
+The authenticated webapp on `zudo-ez-host.app` is the control surface for an
+owner's account, machines, and hosted projects. It does not serve uploaded site
+content. Each project remains a static site on the separate public-content
+domain, with the canonical URL:
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+The webapp makes publication state and recovery actions understandable without
+turning the one-way publisher into a remote file manager. Local project
+directories remain the source of truth; the webapp does not offer per-file
+editing, download, merge, or cloud trash.
+
+Account and machine controls are specified in [Auth and accounts](./auth-and-accounts.mdx).
+Shared preview protection is specified in [Password gates](./password-gates.mdx).
+
+## Projects list
+
+The projects list is owner-scoped and shows every project belonging to the
+signed-in account. Each row exposes the information needed to understand its
+current serving state:
+
+- live, unpublished, or error state;
+- the canonical public URL;
+- the latest successful publication time, when one exists;
+- the machine-name snapshot recorded by that publication; and
+- actionable sync and password-gate status, such as an error requiring local
+  attention or whether shared preview protection is off or enabled.
+
+An unpublished or failed attempt must not appear live merely because bytes were
+uploaded. Only the atomically promoted publication head defines the served
+site. Status should therefore distinguish a currently live publication from a
+newer failed or conflicting attempt.
+
+## Project detail and settings
+
+Project detail repeats the canonical URL and live, unpublished, or error state.
+It shows the latest successful publication time and publishing machine-name
+snapshot, plus actionable sync and gate status needed to diagnose updates. It
+may surface actions defined by the publication lifecycle, including retry
+guidance, deletion/takedown, and rollback when that milestone enables its UI.
+Destructive actions require an explicit confirmation and must not imply that
+local files will be deleted.
+
+Settings expose only controls accepted by the architecture:
+
+- decided display metadata, without changing the project's stable identity;
+- permitted URL handling under the immutable hostname and future alias policy;
+- the explicit SPA fallback flag when its milestone enables that control;
+- the per-project password gate; and
+- milestone-appropriate lifecycle actions.
+
+The SPA flag defaults off. When enabled, it affects only unmatched HTML
+navigations; it does not turn missing asset-like requests into `index.html`.
+Renaming display metadata does not move the canonical URL. Alias behavior is
+still a deferred decision, so the webapp must not promise editable hostnames or
+URL reuse.
+
+This surface does not introduce project roles, teams, billing, paid plans, or
+plan entitlements. Those are not decided project settings for the initial
+product.
+
+## Publication and machine status
+
+Every promoted publication records a stable machine ID, the machine's
+user-editable name as a snapshot, the publication time, and the artifact that
+became the project head. The webapp displays that snapshot as the answer to
+"which machine last updated this project."
+
+Renaming a machine changes its name for future publications only. Historical
+publication attribution remains unchanged, so a later rename must not rewrite
+the latest or retained publication records. If a stale machine tries to replace
+a newer head, the status surface identifies the newer generation and publishing
+machine and directs the user back to the Mac app's rescan and explicit
+overwrite-confirmation flow; it must not silently apply last-writer-wins.
+
+Sync and gate status must be actionable rather than a single ambiguous health
+badge. In particular, publication errors, unpublished state, stale-head
+conflicts, and gate enablement are distinct conditions.
+
+## Milestone availability
+
+The information architecture can anticipate later controls, but it must not
+present configured or designed capabilities as already shipped:
+
+- **M1 — personal MVP:** one invited account, email/password login, basic own
+  profile and project visibility, machine attribution, and revoke-machine
+  action. Password-gate controls remain unavailable until the complete
+  security path is ready.
+- **M2 — multi-user service:** public signup, Google availability alongside
+  password login, owner-isolated project settings, the default-off password
+  gate, rollback UI, and URL alias policy only if separately approved.
+- **M3 — commercial distribution:** paid plans, billing and entitlements,
+  plan-aware quotas, broader administration, support/audit tooling, and formal
+  retention policy.
+
+The exact milestone that first exposes the password-gate UI remains an open
+question. M2 is the roadmap placement, but readiness of the verifier,
+capability, rate-limit, and cache path is a prerequisite to enablement.

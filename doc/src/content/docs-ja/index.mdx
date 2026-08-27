@@ -1,0 +1,48 @@
+---
+title: zudo-ez-host ドキュメント
+description: Mac 上のディレクトリをそれぞれ独立した静的サイトとして公開します。
+sidebar_position: 1
+---
+
+## 1 分でわかる zudo-ez-host
+
+zudo-ez-host は、Mac 上のディレクトリをホスティングされた静的サイトに変える
+サービスです。Mac のメニューバーアプリで sync root を選び、その直下にサイトごとの
+ディレクトリを置きます。直下の各ディレクトリが 1 つの **project** となり、
+それぞれ独立したサイトとしてホスティングされます。アプリはローカルの project を
+監視し、変更を自動的に公開します。
+
+考え方は Dropbox の公開フォルダに似ていますが、同期は意図的に一方向です。
+正とするのはローカルディレクトリであり、zudo-ez-host はその内容を公開します。
+リモートでの編集をダウンロードしたり、クラウド上のファイルシステムを Mac に同期し
+たりはしません。
+
+[ディレクトリモデルから始める](./getting-started)。
+
+## まず押さえる概念
+
+[概念ガイド](./concepts)では、sync root、project、publication、名前を
+付けた machine、control plane と公開サイトの分離について説明します。project の
+canonical URL は次の形式です。
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+`<public-content-domain>` は、信頼できない公開コンテンツのために別途購入する
+ドメインです。認証済みの管理画面とマーケティングサイト専用の
+`zudo-ez-host.app` とは異なります。
+
+このモデルを支える仕組みについては、[hosting と security](./hosting)、
+[sync と Mac client](./sync)、[webapp と account](./webapp)を参照して
+ください。
+
+## ロードマップの行き先
+
+最初の milestone は、招待された 1 account と名前を付けた 1 台以上の Mac を
+対象とする personal MVP です。次の milestone で、その基盤を multi-user service
+へ拡張します。有料 plan、より広範な管理機能、Mac App Store での公開候補は 3 つ
+目の milestone に含まれ、M1 で提供済みの機能ではありません。
+
+正確な境界は [milestone の内訳と glossary](./concepts#milestones)を参照して
+ください。

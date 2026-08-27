@@ -1,0 +1,135 @@
+---
+title: 概念
+description: プロダクトモデル、identity rule、milestone、共通用語を説明します。
+sidebar_position: 3
+---
+
+## Core model
+
+zudo-ez-host は、次のようにローカルディレクトリをそれぞれ独立した hosted site に
+対応付けます。
+
+1. ユーザーが Mac 上の 1 ディレクトリを **sync root** として選びます。
+2. 直下の各ディレクトリが 1 つの **project** になります。
+3. 各 project が 1 つの hosted static site になります。
+4. メニューバーアプリがローカル project の内容をクラウドへ自動的に公開します。
+
+sync root 直下の単独のファイルは project ではありません。project directory より
+下のディレクトリは、その project 内のコンテンツです。正とするのは一方向の
+ローカルディレクトリであり、publication がローカルファイルをダウンロード、
+マージ、リモート編集することはありません。
+
+publication が成功するたびに、1 つの publication-head pointer を変更して、完全で
+immutable な artifact を promote します。閲覧者に見えるのは切り替え前または
+切り替え後の完全な site であり、upload 中の状態ではありません。その promotion
+flow は [sync protocol](../sync)で、promote 済み artifact の配信は
+[hosting](../hosting)で定義します。
+
+## Account と名前を付けた machine
+
+user account は project を所有し、1 台以上の Mac に publication を許可します。
+許可された各 **machine** には stable internal ID があり、ユーザーが編集できる名前が
+付いています。promote された publication は stable ID を記録し、その時点の
+machine 名を snapshot として保存します。machine の rename が影響するのは後続の
+publication だけなので、過去の history には公開時に使われた名前が残ります。
+
+認証済み webapp には own-profile management があり、ユーザーは自分の名前付き
+machine を一覧し revoke できます。これは、ほかの user account の閲覧や制御を
+意味する **administrative user management** とは別物です。operational
+administration は M2 から、より広範な administrative control は M3 に属します。
+M1 の own-profile surface から、これらが利用可能だと解釈してはいけません。この
+境界については [authentication と account](../webapp/auth-and-accounts)を
+参照してください。
+
+## Public URL と不変の identity
+
+project の canonical URL は正確に次の形式です。
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+DNS では project slug と user handle を 1 つの label に結合しますが、UI では
+project と user を別々の概念として表示します。allocation はその label を opaque
+な owner ID と project ID に対応付けます。hostname 自体は ownership の証明には
+なりません。display name を変更しても URL は移動せず、古い label が別の対象へ
+再割り当てされることもありません。この rule によって公開 address を安定させ、
+rename や deletion で他者の identity が移転することを防ぎます。
+
+`<public-content-domain>` は `zudo-ez-host.app` ではありません。production launch
+前に担当者が別の registrable domain を選定、承認、購入し、その更新と復旧の責任者
+を記録する必要があります。正確な registration は、この仕様
+で名前を決めるのではなく deployment prerequisite として残されています。
+user-controlled content を別の registrable domain に置くことで、認証済み control
+plane から分離します。完全な trust boundary と hostname grammar は
+[hosting security](../hosting/security)を参照してください。
+
+## Milestones
+
+milestone は累積する product cut です。後続 milestone の項目を、それより前の
+milestone で利用可能なものとして扱いません。
+
+### M1 — personal MVP
+
+- 招待された 1 account と、名前を付けた 1 台以上の Mac。
+- browser login、user が選ぶ root、自動的な一方向 publication、status と error
+  の表示、opt-in の launch at login を備えた、直接配布される signed Tauri
+  menubar app。
+- email/password login、基本的な own-profile と project の表示、machine
+  attribution、machine revoke を備えた `zudo-ez-host.app` control surface。
+- 別の content domain 上の public site、immutable artifact、atomic promotion、
+  deterministic static serving、takedown support。password gate は security path
+  が完成するまで UI では提供しません。
+
+### M2 — multi-user service
+
+- public signup、email/password と Google login、account recovery、multi-user 間で分離
+  された ownership、profile management、project setting、operational
+  administration。
+- default off の project 単位 password gate、rollback UI、承認された場合の URL
+  alias policy、quota と rate control、abuse handling、production observability。
+- App Store readiness。Google を引き続き表示し例外が適用されない場合の Sign in
+  with Apple、app 内 account deletion、provider revoke、privacy/retention の開示、
+  security-scoped root access、signed sandbox test を含みます。
+
+### M3 — commercial distribution
+
+- 有料 plan、billing と entitlement enforcement、plan-aware quota、より広範な
+  administrative user management、support/audit tooling、正式な retention policy。
+- product economics に見合う場合の Mac App Store release。別途 sign/notarize
+  した direct distribution とその updater も維持します。
+
+## Glossary
+
+**Sync root**
+: ユーザーが選んだ Mac 上のディレクトリです。その直下の各ディレクトリが project
+になります。直下にある単独の file は project ではありません。
+
+**Project**
+: sync root 直下の 1 ディレクトリ、その stable service identity、それに対応する
+独立した hosted static site をまとめた概念です。
+
+**Artifact**
+: project の公開対象ファイルと serving metadata をまとめた、immutable、canonical、
+かつ完全な 1 version です。promote 済み artifact が public site から配信されます。
+
+**Publication head**
+: project から現在の promote 済み artifact を指す、唯一の mutable pointer です。
+atomically に移動することで、live site 全体を完全な 1 version として切り替えます。
+
+**Machine**
+: publication を許可された Mac です。stable ID と編集可能な名前を持ち、
+publication には公開した machine 名の snapshot が残ります。
+
+**Control plane**
+: account、project、hostname allocation、publication head、quota、password gate、
+audit state を所有する、認証済み service boundary です。
+
+**Public-content domain**
+: user-controlled public site 専用に別途購入する registrable domain です。control
+と marketing 用の `zudo-ez-host.app` domain とは異なります。
+
+**Password gate**
+: project 単位で任意に設定する shared preview protection です。default は off で、
+project password を知る人に access を許可します。user identity、role、個々の
+visitor administration を提供するものではありません。

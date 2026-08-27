@@ -1,0 +1,99 @@
+---
+title: 認証とアカウント
+description: Better Auth、browser session、個人用 account control、App Store 要件の仕様です。
+sidebar_position: 31
+---
+
+## Better Auth の境界
+
+D1 binding は request-scoped であるため、control Worker は Worker request ごとに
+Better Auth を生成します。Better Auth は `nodejs_compat` を有効にし、Drizzle adapter
+経由で D1 を使用します。採用済みの authentication provider は email/password と
+Google です。provider credential は Worker secret に保存し、環境ごとに正確な callback
+URL を設定します。
+
+authentication は request の実行者を特定しますが、それだけで project、publication
+attempt、machine の ownership を証明するものではありません。control-plane のすべての
+data query と mutation は、認証済み所有者の opaque ID によっても scope されなければ
+なりません。hostname、project slug、handle、machine name は authorization boundary
+ではありません。
+
+## Browser session
+
+webapp session は secure、HTTP-only、host-only cookie を使用します。control-plane
+cookie には `__Host-` prefix、`Secure`、`HttpOnly`、`Path=/`、適切な `SameSite` policy
+を設定し、`Domain` attribute は設定しません。この authority は `zudo-ez-host.app` に
+限定され、別の public-content domain 上の site には送信されません。
+
+credential を伴う browser access は、正確な trusted control-plane origin からだけ許可
+します。`*`、reflected origin、`null`、public content domain を許可してはなりません。
+state-changing cookie route は、CORS も設定されている場合であっても `Origin` を検証し、
+CSRF protection を適用します。session check 後の data access も owner-scoped とし、
+scope のない project query や upload query を実行しません。
+
+Mac app はこれらの cookie を再利用しません。system-browser authorization と machine
+credential の flow を分離し、native publisher が webapp の ambient session authority
+を受け取らないようにします。
+
+## Sign-up と login
+
+account creation は webapp から開始します。Mac app から案内することはできますが、
+別の sign-up system は定義しません。provider support と milestone enablement は意図的に
+別の概念です。
+
+- **M1** は personal かつ invite-only です。有効な login は email/password です。
+- **M2** で public signup、account recovery、password login と並ぶ Google の提供を
+  追加します。
+
+Better Auth architecture が Google 用に設定可能であることは、M1 で public signup や
+Google login を表示することを意味しません。Google provider は両方の credential と
+正確な production callback が存在する場合だけ有効にします。
+
+## 自分の profile と machine
+
+自分自身の account information の管理は product scope です。M1 は基本的な own-profile
+surface を提供し、M2 で profile management を拡張します。この surface が操作するのは
+signed-in user 自身の data だけです。
+
+webapp はその user の named machine も一覧表示し、個別の machine credential を revoke
+できるようにします。各 entry は stable machine ID、user-editable display name、device を
+識別するために十分な status を表します。revocation は他の machine や browser session
+を無効にせず、その machine の publish-limited credential だけを停止します。rename で
+変わるのは将来の publication snapshot だけであり、過去の machine-name attribution は
+変わりません。
+
+token management と account-destructive action には browser session と、必要に応じた
+reauthentication が必要です。machine credential は credential の mint/revoke や
+account-destructive action を実行できません。
+
+## 管理者による user management との違い
+
+own-profile management と administrative user management は別物です。前者は signed-in
+person が自分自身の profile と named machine を管理する current product scope です。
+administrative management は、他の user account の閲覧、制御、suspension、その他の
+operation を意味します。
+
+operational administration は M2 service milestone で導入し、より広い administrative
+user management、paid plan、billing、entitlement、support/audit tooling は M3 に属します。
+initial webapp は、これら将来の operator/commercial capability を通常の profile control
+に見せかけたり、user role や team management を作り出したりしてはなりません。
+
+## Mac App Store のアカウント要件
+
+sign-up が webapp から始まる場合でも、Mac App Store build を submit する前に次の要件を
+満たします。
+
+- App Store build で primary-account login に Google を残す場合、App Review の例外に
+  該当しない限り Sign in with Apple を追加します。email/password が equivalent-login
+  rule のすべての性質を満たすとは想定しません。
+- 見つけやすい in-app account-deletion entry を用意します。browser reauthentication に
+  handoff しても構いませんが、web-only signup は native entry point を省略する理由には
+  なりません。
+- social-provider credential と data access の unlink または revocation を app 内から
+  実行できるようにします。
+- submit 前に privacy policy と data retention/deletion の説明へアクセスできるように
+  します。
+
+その build で Google を表示し続ける場合、account linking、provider revocation behavior、
+App Review test credential には implementation milestone が必要です。これらの要件は
+Mac App Store release 自体が M3 より前に ship することを意味しません。

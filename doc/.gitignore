@@ -1,0 +1,40 @@
+# Build output
+node_modules
+dist
+.zfb
+.zfb-build/
+
+# macOS
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Cloudflare Wrangler
+.wrangler/
+
+# zudo-doc build artifact (routes-src/ staged here at build time)
+.zudo-doc/
+
+# Generated Claude resource docs (rebuilt on every documentation build)
+src/content/docs/claude/
+src/content/docs/claude-md/
+src/content/docs/claude-commands/
+src/content/docs/claude-skills/
+src/content/docs/claude-agents/
+
+# Generated doc-lookup skill
+.claude/skills/doc-wisdom/SKILL.md
+.claude/skills/doc-wisdom/docs
+.codex/skills/doc-wisdom/SKILL.md
+.codex/skills/doc-wisdom/docs
+.claude/skills/doc-wisdom/docs-ja
+.codex/skills/doc-wisdom/docs-ja

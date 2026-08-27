@@ -1,0 +1,114 @@
+---
+title: Mac client
+description: The Tauri desktop architecture, filesystem reconciliation, and release boundary.
+sidebar_position: 2
+---
+
+## Tauri v2 application shape
+
+The Mac client is a Tauri v2 accessory/menu-bar app. A Rust-owned engine uses
+the `notify` watcher as an event source and owns scanning, hashing, publication,
+and lifecycle correctness. The WebView presents setup, status, errors, account,
+and preferences; it does not own filesystem state.
+
+The normal window is hidden by default but remains keyboard and VoiceOver
+accessible when opened from the menu bar. Closing it hides the window rather
+than terminating the app. Only an explicit **Quit** action stops watchers and
+exits.
+
+## Root and project discovery
+
+The user chooses one sync root with the native folder picker. Every immediate
+child directory is one project and one hosted site. Loose files directly under
+the root are ignored, and the UI explains that behavior visibly. Creating,
+renaming, or deleting an immediate child refreshes the project inventory and
+triggers reconciliation.
+
+Persisted root access goes through a `resolve root -> access guard -> path`
+abstraction backed by a bookmark, not only a path string. This keeps direct and
+sandboxed access behind the same boundary. Symlinks are reported and never
+published, and app state is stored outside the selected content tree.
+
+## Watching and reconciliation
+
+The Rust engine keeps a recursive `notify` watcher alive for the selected root.
+Events only mark affected projects for reconciliation. Ordinary bursts use a
+500 ms quiet period with a 5 second maximum delay. Only one reconciliation may
+run for a project; events received while it runs set a dirty bit and cause one
+follow-up scan.
+
+A complete scan is the correctness boundary on launch, wake, root change,
+watcher failure or overflow, and a periodic safety pass. Root permission changes
+also require access to be resolved again and the watcher re-established. Hash
+caching may use stable local identity, size, and high-resolution mtime, but a
+cold or ambiguous scan hashes again and server equality always uses SHA-256.
+Publication then follows the [atomic sync protocol](/docs/sync).
+
+## Browser login and machine credentials
+
+Login uses the system browser rather than shared WebView cookies. The app
+generates `state` and a PKCE verifier/challenge, starts an ephemeral loopback
+listener, and opens `/desktop/authorize`. After normal web login and consent,
+the browser redirects a random, single-use authorization code to the exact
+loopback redirect. The code expires after 60 seconds and is bound to the user,
+redirect, PKCE challenge, requested `publish` scope, and machine record. The
+listener accepts one valid request, validates `state`, and shuts down.
+
+The app exchanges the code and verifier over TLS. No session or long-lived
+bearer appears in the callback URL. The returned machine credential has exactly
+this V1 wire shape:
+
+```text
+zeh_machine_v1_<random>
+```
+
+`<random>` is 32 cryptographically random bytes encoded as unpadded base64url.
+The credential has a maximum lifetime of one year, is machine-scoped,
+revocable, and limited to project and publish operations. It cannot manage
+credentials or perform account-destructive actions. The server stores the
+SHA-256 hash of the complete token and keeps its non-secret prefix/version
+separately. The raw token is shown once and stored only in macOS Keychain. The
+webapp can list and revoke named machines.
+
+## Background lifecycle
+
+Launch at login is an explicit, reversible, opt-in LaunchAgent preference. A
+login launch starts hidden and does not force an authentication prompt. The
+menu-bar status surfaces offline, authentication, scan, and publication errors
+without tight retry loops, and the accessible window provides details and
+recovery actions.
+
+Wake triggers a full scan. Root changes, permission failures, and watcher
+failures rebuild the access guard and watcher before reconciliation resumes.
+The explicit Quit action shuts down watchers and in-flight background work.
+
+## Distribution and App Store boundary
+
+Direct releases use Developer ID, hardened runtime, signing of nested code,
+notarization, and stapling. Their Tauri updater uses signed artifacts over TLS;
+signature verification is never disabled, and update installation must not
+restart during an active publication without user confirmation.
+
+The Mac App Store is a separate build and release path. It uses Apple
+Distribution, an App Store provisioning profile, sandbox entitlements, App
+Store review, and App Store updates—not the direct updater. The two channels
+keep signing identities, entitlements, and updater configuration separate.
+
+An App Store build needs user-selected-file entitlement and security-scoped
+bookmark access. The app must resolve stale bookmarks and correctly start and
+stop security-scoped access. App Store support must not be claimed until root
+selection, relaunch persistence, and recursive watcher behavior pass tests in
+an actually signed sandbox build.
+
+## Open questions
+
+Only these desktop decisions remain open:
+
+- What periodic full-scan interval balances recovery with battery and SSD cost?
+- What minimum macOS version and CPU matrix will be supported, including
+  whether to ship separate Apple Silicon and Intel builds or a universal binary?
+- How and when should active machine credentials rotate within their one-year
+  maximum lifetime, including recovery after loss or theft?
+- When should full security-scoped bookmark handling become a shipping App
+  Store capability rather than an abstraction and signed-sandbox validation
+  milestone?

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.zfb/
+.zfb-build/
+doc/.zudo-doc/
+.wrangler/
+worktrees/
+test-results/
+playwright-report/
+pnpm-lock.yaml

@@ -1,0 +1,102 @@
+---
+title: Authentication and accounts
+description: Better Auth, browser sessions, personal account controls, and App Store requirements.
+sidebar_position: 31
+---
+
+## Better Auth boundary
+
+The control Worker creates Better Auth inside each Worker request because the
+D1 binding is request-scoped. Better Auth uses D1 through the Drizzle adapter
+with `nodejs_compat`. Email/password and Google are the decided authentication
+providers, with provider credentials kept in Worker secrets and exact callback
+URLs configured for each environment.
+
+Authentication establishes who is making a request; it does not itself prove
+ownership of a project, publication attempt, or machine. Every control-plane
+data query and mutation must also be scoped by the authenticated owner's opaque
+ID. A hostname, project slug, handle, or machine name is never an authorization
+boundary.
+
+## Browser sessions
+
+Webapp sessions use secure, HTTP-only, host-only cookies. The control-plane
+cookie uses a `__Host-` prefix, `Secure`, `HttpOnly`, `Path=/`, an appropriate
+`SameSite` policy, and no `Domain` attribute. This authority is confined to
+`zudo-ez-host.app` and is never sent to sites on the separate public-content
+domain.
+
+Credentialed browser access is allowed only from exact trusted control-plane
+origins. It must never accept `*`, reflected origins, `null`, or the public
+content domain. State-changing cookie routes validate `Origin` and enforce
+CSRF protection even when CORS is also configured. Session checks still lead
+to owner-scoped data access rather than unqualified project or upload queries.
+
+The Mac app does not reuse these cookies. Its system-browser authorization and
+machine credential flow are separate so a native publisher never receives the
+webapp's ambient session authority.
+
+## Sign-up and login
+
+Account creation begins on the webapp; the Mac app may direct a user there but
+does not define a separate sign-up system. Provider support and milestone
+enablement are deliberately different concepts:
+
+- **M1** is personal and invite-only. Its enabled login is email/password.
+- **M2** adds public signup, account recovery, and Google availability alongside
+  password login.
+
+The Better Auth architecture can be configured for Google without implying
+that public signup or Google login is visible in M1. Enable a Google provider
+only when both credentials and the exact production callback are present.
+
+## Own profile and machines
+
+Managing one's own account information is product scope. M1 provides a basic
+own-profile surface; M2 expands profile management. This surface operates on
+the signed-in user's data only.
+
+The webapp also lists that user's named machines and allows an individual
+machine credential to be revoked. Each entry represents a stable machine ID
+with a user-editable display name and enough status to identify the device.
+Revocation stops that machine's publish-limited credential without revoking
+other machines or the browser session. Renaming changes future publication
+snapshots only; historical machine-name attribution remains unchanged.
+
+Token management and account-destructive actions require a browser session and
+reauthentication where appropriate. A machine credential cannot mint or revoke
+credentials or perform account-destructive actions.
+
+## Administrative management is different
+
+Own-profile management is not administrative user management. The former lets
+a signed-in person manage their own profile and named machines and is current
+product scope. Administrative management means viewing, controlling,
+suspending, or otherwise operating on other users' accounts.
+
+Operational administration enters the M2 service milestone; broader
+administrative user management, paid plans, billing, entitlements, and
+support/audit tooling belong to M3. The initial webapp must not disguise those
+later operator or commercial capabilities as ordinary profile controls, nor
+invent user roles or team management.
+
+## Mac App Store account requirements
+
+These requirements apply before submitting a Mac App Store build, even though
+sign-up starts on the webapp:
+
+- If Google remains available for primary-account login in the App Store build,
+  add Sign in with Apple unless an App Review exception applies. Email/password
+  must not be assumed to satisfy every property of the equivalent-login rule.
+- Provide a discoverable in-app account-deletion entry. It may hand off to
+  browser reauthentication, but web-only signup is not a reason to omit the
+  native entry point.
+- Provide in-app unlinking or revocation of social-provider credentials and
+  data access.
+- Make the privacy policy and data retention/deletion explanation accessible
+  before submission.
+
+Account linking, provider revocation behavior, and App Review test credentials
+need an implementation milestone if Google stays visible in that build. These
+requirements do not imply that the Mac App Store release itself ships before
+M3.

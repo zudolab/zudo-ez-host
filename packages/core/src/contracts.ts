@@ -20,6 +20,8 @@ export interface ManifestEntry {
   readonly path: string;
   readonly sha256: string;
   readonly size: number;
+  /** Optional local mtime cache hint, in integer milliseconds since the epoch. */
+  readonly mtimeMs?: number;
   readonly contentType: string;
 }
 

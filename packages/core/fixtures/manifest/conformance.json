@@ -1,0 +1,121 @@
+{
+  "accepted": [
+    {
+      "name": "sorts entries and keeps optional mtime in its fixed position",
+      "input": {
+        "version": 1,
+        "servingSemanticsVersion": 1,
+        "entries": [
+          {
+            "path": "z.txt",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 12,
+            "contentType": "text/plain"
+          },
+          {
+            "path": "a.txt",
+            "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+            "size": 0,
+            "mtimeMs": 0,
+            "contentType": "text/plain"
+          }
+        ]
+      },
+      "canonical": "{\"version\":1,\"servingSemanticsVersion\":1,\"entries\":[{\"path\":\"a.txt\",\"sha256\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"size\":0,\"mtimeMs\":0,\"contentType\":\"text/plain\"},{\"path\":\"z.txt\",\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"size\":12,\"contentType\":\"text/plain\"}]}"
+    },
+    {
+      "name": "uses the safe content type for an unknown value",
+      "input": {
+        "version": 1,
+        "servingSemanticsVersion": 1,
+        "entries": [
+          {
+            "path": "download",
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+            "size": 3,
+            "contentType": "unknown"
+          }
+        ]
+      },
+      "canonical": "{\"version\":1,\"servingSemanticsVersion\":1,\"entries\":[{\"path\":\"download\",\"sha256\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"size\":3,\"contentType\":\"application/octet-stream\"}]}"
+    }
+  ],
+  "rejected": [
+    {
+      "name": "rejects an exact duplicate path",
+      "input": {
+        "version": 1,
+        "servingSemanticsVersion": 1,
+        "entries": [
+          {
+            "path": "index.html",
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+            "size": 1,
+            "contentType": "text/html"
+          },
+          {
+            "path": "index.html",
+            "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+            "size": 2,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      "reason": "duplicate_path"
+    },
+    {
+      "name": "rejects a portable case collision",
+      "input": {
+        "version": 1,
+        "servingSemanticsVersion": 1,
+        "entries": [
+          {
+            "path": "Logo.png",
+            "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+            "size": 1,
+            "contentType": "image/png"
+          },
+          {
+            "path": "logo.png",
+            "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+            "size": 1,
+            "contentType": "image/png"
+          }
+        ]
+      },
+      "reason": "portable_path_collision"
+    },
+    {
+      "name": "rejects an invalid canonical path",
+      "input": {
+        "version": 1,
+        "servingSemanticsVersion": 1,
+        "entries": [
+          {
+            "path": "assets/../secret.txt",
+            "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+            "size": 1,
+            "contentType": "text/plain"
+          }
+        ]
+      },
+      "reason": "parent_segment"
+    },
+    {
+      "name": "rejects a non-lowercase SHA-256",
+      "input": {
+        "version": 1,
+        "servingSemanticsVersion": 1,
+        "entries": [
+          {
+            "path": "index.html",
+            "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "size": 1,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      "reason": "invalid_sha256"
+    }
+  ]
+}

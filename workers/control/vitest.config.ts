@@ -18,6 +18,9 @@ export default defineProject({
   test: {
     name: "control-worker",
     include: ["src/**/*.test.ts"],
+    // This integration project starts/imports a real workerd Worker; keep the
+    // default 5s guardrail for pure-unit projects while budgeting that startup.
+    testTimeout: 15_000,
     provide: { controlMigrations },
   },
 });

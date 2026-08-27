@@ -127,6 +127,16 @@ export const verifications = sqliteTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+// Better Auth 1.7.2's generated database rate-limit model. Keep the physical
+// camel-case table and field mapping aligned with the adapter's `rateLimit`
+// model so database-backed throttling does not silently fall back to memory.
+export const rateLimits = sqliteTable("rateLimit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request", { mode: "number" }).notNull(),
+});
+
 export const userRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   accounts: many(accounts),
@@ -435,6 +445,7 @@ export const schema = {
   publicationAttempts,
   publicationObjects,
   publications,
+  rateLimits,
   sessionRelations,
   sessions,
   userRelations,
@@ -447,6 +458,7 @@ export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type Verification = typeof verifications.$inferSelect;
+export type RateLimit = typeof rateLimits.$inferSelect;
 export type Machine = typeof machines.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type HostnameAllocation = typeof hostnameAllocations.$inferSelect;

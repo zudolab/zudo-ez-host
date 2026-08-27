@@ -27,6 +27,7 @@ import {
   publicationAttempts,
   publicationObjects,
   publications,
+  rateLimits,
   sessions,
   users,
   verifications,
@@ -87,24 +88,27 @@ describe("control D1 schema", () => {
       session: sessions,
       account: accounts,
       verification: verifications,
+      rateLimit: rateLimits,
     });
 
     const tables = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('user', 'session', 'account', 'verification') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('user', 'session', 'account', 'verification', 'rateLimit') ORDER BY name",
     ).all<{ name: string }>();
     expect(tables.results.map(({ name }) => name)).toEqual([
       "account",
+      "rateLimit",
       "session",
       "user",
       "verification",
     ]);
 
     const indexes = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('session_token_unique', 'session_userId_idx', 'account_issuer_accountId_uidx', 'account_userId_idx', 'user_email_unique', 'verification_identifier_idx') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('session_token_unique', 'session_userId_idx', 'account_issuer_accountId_uidx', 'account_userId_idx', 'user_email_unique', 'verification_identifier_idx', 'rateLimit_key_unique') ORDER BY name",
     ).all<{ name: string }>();
     expect(indexes.results.map(({ name }) => name)).toEqual([
       "account_issuer_accountId_uidx",
       "account_userId_idx",
+      "rateLimit_key_unique",
       "session_token_unique",
       "session_userId_idx",
       "user_email_unique",

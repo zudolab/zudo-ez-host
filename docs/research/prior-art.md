@@ -87,6 +87,9 @@ the current house stack does not use this Auth0 boundary.
 [`packages/sync-client/src/client.ts`](https://github.com/zudolab/zudo-file-sync/blob/4e5093754405c14bfeb5b8fdf4f89cd541cbcd21/packages/sync-client/src/client.ts)
 is a portable TypeScript SDK for Node and browsers. `syncVault` hashes local
 content, posts the manifest, then performs the returned uploads/downloads.
+The worker's `SyncDiff` includes `toTrash`, but this client snapshot's
+`SyncDiff` type and `syncVault` implementation do not consume that field; a
+caller that needs deletion propagation must handle it explicitly.
 [`packages/sync-client/src/hash.ts`](https://github.com/zudolab/zudo-file-sync/blob/4e5093754405c14bfeb5b8fdf4f89cd541cbcd21/packages/sync-client/src/hash.ts)
 uses `crypto.subtle.digest("SHA-256", ...)`, so hashing is independent of a
 Node-only crypto API.
@@ -99,6 +102,12 @@ The lineage is directly visible in zudo-text:
   ports `packages/sync-client/src/{client,hash,conflict,types}.ts` into the
   `@takazudo/sync-client` workspace package. The files were read with
   `git show efd639901:<path>`.
+- The package then grew through follow-up commits: review fixes in
+  [`989406dabfbc512a142cda62ead95673906964f8`](https://github.com/zudolab/zudo-text/commit/989406dabfbc512a142cda62ead95673906964f8), package/dependency cleanup in
+  [`ed61c0a5221e488cafa06e2e228456ed9643dc3f`](https://github.com/zudolab/zudo-text/commit/ed61c0a5221e488cafa06e2e228456ed9643dc3f), structured logging in
+  [`4308195f41423c2a33c86249772daebd7f482d43`](https://github.com/zudolab/zudo-text/commit/4308195f41423c2a33c86249772daebd7f482d43), and iOS conflict/device policy work in
+  [`3d2f239194c9336922c61892d9912b656ba99a23`](https://github.com/zudolab/zudo-text/commit/3d2f239194c9336922c61892d9912b656ba99a23) and
+  [`bc405df998f85bb5166b716c58f89c4790bb1420`](https://github.com/zudolab/zudo-text/commit/bc405df998f85bb5166b716c58f89c4790bb1420). This is the concrete PR-era growth that preceded retirement.
 - Commit [`eb6c60d7b0f0e160e5288730258c981a98e18a31`](https://github.com/zudolab/zudo-text/commit/eb6c60d7b0f0e160e5288730258c981a98e18a31)
   adds the product-owned cloud-sync architecture: `packages/cloud-sync`,
   `packages/cloud-crypto`, and `workers/sync-server`, including WebSockets,
@@ -264,10 +273,10 @@ is a pure boundary parser. It accepts only a lower-case ASCII host under the
 configured sites domain, rejects ports/percent escapes/trailing dots/nested
 labels, rejects internal opaque incarnation IDs at the public host boundary,
 and classifies a host as a document site or a personal-index handle. The public
-Worker entrypoint in `src/index.ts` receives only `SITES_DOMAIN`, a transform-
-rule readiness flag, the artifact R2 binding, and named service bindings for
-public resolution/integrity signals. It has no secret, authoring credential,
-authoring D1/R2, session, source, or build binding.
+Worker entrypoint in `src/index.ts` uses `SITES_DOMAIN`, transform-rule and
+operator-approval readiness flags, the artifact R2 binding, and named service
+bindings for public resolution/integrity signals. It has no secret, authoring
+credential, authoring D1/R2, session, source, or build binding.
 
 The resolver returns a bounded authorization tuple (site ID, public label,
 origin, artifact ID, canonical build hash, artifact content hash, and manifest

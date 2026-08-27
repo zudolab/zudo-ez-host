@@ -4,6 +4,12 @@ zudo-ez-host will let a Mac menubar app sync directories to Cloudflare so each d
 
 This app is under development. NEVER consider backward compatibility until release.
 
+## Status
+
+The bootstrap and specification phase is complete. First-party packages under
+`packages/*` are now in scope. Workers, `wrangler.toml`, and deploy-specific
+dependencies remain deferred to the Workers epic.
+
 ## Tech stack
 
 - pnpm monorepo with first-party packages under `packages/*`, Workers under `workers/*`, and the documentation site under `doc/`.
@@ -13,7 +19,8 @@ This app is under development. NEVER consider backward compatibility until relea
 - Future desktop client: a Tauri v2 Mac app.
 - Documentation is built with `zudo-doc`.
 
-Do not add product code, Workers, or a `wrangler.toml` during the repository bootstrap phase. Keep deploy-specific dependencies in the package that owns the deploy unit.
+Workers and a `wrangler.toml` remain deferred to the Workers epic. Keep
+deploy-specific dependencies in the package that owns the deploy unit.
 
 ## Commands
 
@@ -22,8 +29,8 @@ Do not add product code, Workers, or a `wrangler.toml` during the repository boo
 - `pnpm lint` runs the flat ESLint configuration.
 - `pnpm typecheck` runs strict TypeScript checking.
 - `pnpm build` delegates builds to workspace packages when they exist.
-- `pnpm test` runs the fast Vitest unit-test lane and passes when no tests exist yet.
-- `pnpm verify` and `pnpm b4push` run the collected-failure gate: frozen install, format check, lint, typecheck, build, documentation i18n parity, and internal-link checks.
+- `pnpm test` runs the fast Vitest unit-test lane; test discovery is expected to find at least one test.
+- `pnpm verify` and `pnpm b4push` run the collected-failure gate: frozen install, format check, lint, typecheck, build, test, documentation i18n parity, and internal-link checks.
 - `pnpm init-worktree` installs the direct hook guard in a fresh worktree.
 
 The local gate intentionally does not run heavy browser suites. Run a held-open development server only when the task explicitly requires interactive work.
@@ -37,7 +44,7 @@ The `prepare` lifecycle script installs lefthook and then installs `.git/hooks/p
 ## Key directories
 
 - `.github/workflows/` — CI and workflow linting.
-- `packages/*` — first-party libraries added by later implementation work.
+- `packages/*` — first-party libraries and shared pure logic.
 - `workers/*` — deployable Workers added by later implementation work.
 - `doc/` — the scaffolded `zudo-doc` documentation site and its bilingual content.
 - `scripts/` — repository automation and git hooks.

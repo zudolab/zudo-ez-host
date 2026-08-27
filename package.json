@@ -15,7 +15,7 @@
     "// ── Quality ──────────────────────────": "",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "check:doc:i18n": "pnpm --dir doc run check:i18n",
     "check:doc:links": "pnpm --dir doc run check:links -- --strict-broken --strict-absolute --strict-anchors --strict-trailing",
     "b4push": "bash scripts/run-b4push.sh",

@@ -88,6 +88,8 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/core: {}
+
 packages:
 
   '@cloudflare/workers-types@4.20260702.1':

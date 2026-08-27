@@ -4,7 +4,10 @@ zudo-ez-host is a Dropbox-public-folder-like hosting system whose Mac menubar ap
 
 ## Status
 
-This repository is in the pre-implementation bootstrap and specification phase. Product packages and Workers will arrive in later work; the bilingual documentation site is scaffolded under [`doc/`](doc/).
+The bootstrap and specification phase is complete. First-party packages under
+`packages/*` are now in scope. Workers, `wrangler.toml`, and deploy-specific
+dependencies remain deferred to the Workers epic. The bilingual documentation
+site is scaffolded under [`doc/`](doc/).
 
 ## Development
 

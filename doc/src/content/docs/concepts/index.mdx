@@ -1,0 +1,138 @@
+---
+title: Concepts
+description: The product model, identity rules, milestones, and shared vocabulary.
+sidebar_position: 3
+---
+
+## Core model
+
+zudo-ez-host maps local directories to independently hosted sites:
+
+1. A user chooses one Mac directory as the **sync root**.
+2. Every immediate child directory is one **project**.
+3. Every project is one hosted static site.
+4. The menubar app automatically publishes local project contents to the cloud.
+
+Loose files directly in the sync root are not projects. Directories below a
+project directory are content within that project. The local directory is the
+one-way source of truth: publication does not download, merge, or remotely edit
+local files.
+
+Each successful publication promotes a complete immutable artifact by changing
+one publication-head pointer. Visitors see either the previous complete site or
+the next complete site, never an upload in progress. The [sync protocol](../sync)
+specifies that promotion flow, while [hosting](../hosting) specifies how the
+promoted artifact is served.
+
+## Accounts and named machines
+
+A user account owns projects and authorizes one or more Macs to publish. Each
+authorized **machine** has a stable internal ID and a name the user can edit.
+Every promoted publication records the stable ID and snapshots the machine name
+at that moment. Renaming the machine affects later publications only, so old
+history continues to show the name used when it was published.
+
+The authenticated webapp includes own-profile management and lets a user list
+and revoke their named machines. This is distinct from **administrative user
+management**, which means viewing or controlling other users' accounts.
+Operational administration begins in M2, and broader administrative controls
+belong to M3; neither should be inferred from the M1 own-profile surface. See
+[authentication and accounts](../webapp/auth-and-accounts) for that boundary.
+
+## Public URLs and stable identity
+
+A project's canonical URL is exactly:
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+The UI presents the project and user separately even though DNS combines their
+slug and handle in one label. Allocation maps that label to opaque owner and
+project IDs; the hostname itself is never evidence of ownership. Display-name
+changes do not move a URL, and an old label is never reassigned. These rules
+keep a public address stable and prevent a rename or deletion from transferring
+someone else's identity.
+
+`<public-content-domain>` is not `zudo-ez-host.app`. A human owner must select,
+approve, and purchase that separate registrable domain before production launch
+and record its renewal and recovery ownership. The exact registration remains a
+deployment prerequisite rather than a name chosen by this specification.
+Keeping user-controlled content on a separate registrable domain isolates it
+from the authenticated control plane. See [hosting security](../hosting/security)
+for the complete trust boundary and hostname grammar.
+
+## Milestones
+
+The milestones are cumulative product cuts. A later item is not presented as
+available in an earlier milestone.
+
+### M1 — personal MVP
+
+- One invited account with one or more named Macs.
+- A directly distributed, signed Tauri menubar app with browser login, a
+  user-selected root, automatic one-way publication, visible status and errors,
+  and opt-in launch at login.
+- A `zudo-ez-host.app` control surface with email/password login, basic
+  own-profile and project visibility, machine attribution, and machine
+  revocation.
+- Public sites on the separate content domain, immutable artifacts, atomic
+  promotion, deterministic static serving, and takedown support. Password gates
+  remain out of the UI until their security path is complete.
+
+### M2 — multi-user service
+
+- Public signup, email/password and Google login, account recovery, isolated
+  multi-user ownership, profile management, project settings, and operational
+  administration.
+- A per-project password gate that defaults off, rollback UI, URL alias policy
+  if approved, quotas and rate controls, abuse handling, and production
+  observability.
+- App Store readiness: Sign in with Apple if Google remains visible and no
+  exception applies, plus in-app account deletion, provider revocation,
+  privacy/retention disclosure, security-scoped root access, and signed sandbox
+  testing.
+
+### M3 — commercial distribution
+
+- Paid plans, billing and entitlement enforcement, plan-aware quotas, broader
+  administrative user management, support and audit tooling, and a formal
+  retention policy.
+- A Mac App Store release if product economics justify it, while retaining the
+  separately signed and notarized direct distribution and its updater.
+
+## Glossary
+
+**Sync root**
+: The user-selected Mac directory whose immediate child directories are
+projects. Loose files directly inside it are not projects.
+
+**Project**
+: One immediate child directory of the sync root, its stable service identity,
+and its independently hosted static site.
+
+**Artifact**
+: An immutable, canonical, complete version of a project's publishable files
+and serving metadata. A promoted artifact is what the public site serves.
+
+**Publication head**
+: The single mutable pointer from a project to its current promoted artifact.
+Moving it atomically changes the live site as one complete version.
+
+**Machine**
+: An authorized Mac publisher with a stable ID and editable name. Publications
+retain a snapshot of the publishing machine's name.
+
+**Control plane**
+: The authenticated service boundary that owns accounts, projects, hostname
+allocation, publication heads, quotas, password gates, and audit state.
+
+**Public-content domain**
+: The separately purchased registrable domain used only for user-controlled
+public sites, distinct from the `zudo-ez-host.app` control and marketing
+domain.
+
+**Password gate**
+: Optional, per-project shared preview protection. It defaults off and grants
+access to anyone with the project password; it is not user identity, roles,
+or individual visitor administration.

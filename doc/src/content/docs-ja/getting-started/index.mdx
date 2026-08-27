@@ -1,10 +1,74 @@
 ---
-title: zudo-ez-host ドキュメント
-description: zudo-ez-host プロジェクトのドキュメントです。
-sidebar_position: 1
+title: はじめに
+description: ローカルディレクトリがホスティングされた静的サイトになる仕組みを説明します。
+sidebar_position: 2
 ---
 
-zudo-ez-host は現在開発中です。プロジェクトの進行に合わせて、プロダクト、
-アーキテクチャ、実装に関するガイドをこのサイトに追加していきます。
+## Dropbox の public-folder model
 
-<CategoryNav category="getting-started" />
+zudo-ez-host は、静的サイトのための Dropbox 風の公開フォルダと考えられます。
+Mac 上の 1 つのディレクトリを **sync root** として選ぶと、Mac のメニューバー
+アプリがその直下にあるディレクトリを監視し、内容をクラウドへ自動的に公開します。
+
+これは公開の仕組みであり、双方向のファイル同期ではありません。正とするのは
+ローカルディレクトリです。サービスがリモートのファイルをダウンロードしたり、
+リモートでの編集をマージしたり、クラウド上のゴミ箱を Mac に反映したりはしません。
+
+## Sync root、project、hosted site
+
+対応関係は意図的に単純です。
+
+```text
+選択した sync root
+├── portfolio/    -> 1 project -> 1 hosted static site
+├── presentation/ -> 1 project -> 1 hosted static site
+└── notes.txt     -> project ではない
+```
+
+project になるのは直下のディレクトリだけです。さらに内側のディレクトリは親
+project のコンテンツであり、sync root 直下にある単独のファイルは project では
+ありません。アプリは、これらのファイルが無視されることを説明します。
+
+project には、次の正確な形式で canonical URL が割り当てられます。
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+public-content domain は、本番公開前に担当者が選定して購入する別のドメインです。
+認証済みのプロダクト画面とマーケティングページを提供する
+`zudo-ez-host.app` とは意図的に分けられています。この URL の identity rule
+については、[public URL と不変の identity](../concepts#public-url-と不変の-identity)
+を参照してください。
+
+## Setup 後の動作
+
+sync root を選びブラウザ経由でサインインした後、Mac に識別しやすい名前を付け
+ます。この名前は後から変更できます。アプリは変更を監視し、各 project をローカル
+ディレクトリと整合させます。publication が成功すると hosted site の表示内容
+全体がアトミックに切り替わるため、閲覧者に不完全なアップロードが見える
+ことはありません。
+
+promote された publication には、machine の stable ID と公開時点の名前の
+snapshot が記録されます。そのため webapp には、どの machine が最後に project
+を更新したか表示できます。machine の rename が変えるのは今後の表示だけであり、
+過去の publication history は書き換わりません。
+
+publication と競合処理は [sync 仕様](../sync)を、project と machine の状態は
+[webapp 仕様](../webapp)を参照してください。
+
+## 現在の milestone 境界
+
+M1 は personal MVP です。招待された 1 account、名前を付けた 1 台以上の Mac、
+自動的な一方向 publication、状態とエラーの表示、基本的な own-profile と
+project の表示、machine の revoke、別の content domain 上の公開 static site
+を対象とします。password gate は、そのセキュリティ経路が完成するまで UI では
+利用できません。
+
+public signup、multi-user operation、Google login の提供、より豊富な project
+setting、password gate、rollback UI、App Store readiness は M2 の作業です。有料
+plan、billing、より広範な administrative user management、Mac App Store での
+公開候補は M3 の作業です。後続 milestone は予定する範囲を示すものであり、すでに
+提供済みの機能ではありません。
+
+[core concept と milestone 全体](../concepts)へ進んでください。

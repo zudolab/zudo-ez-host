@@ -1,10 +1,76 @@
 ---
-title: zudo-ez-host documentation
-description: Documentation for the zudo-ez-host project.
-sidebar_position: 1
+title: Getting started
+description: Understand how local directories become hosted static sites.
+sidebar_position: 2
 ---
 
-zudo-ez-host is under active development. This site will collect the product,
-architecture, and implementation guidance as the project takes shape.
+## The Dropbox public-folder model
 
-<CategoryNav category="getting-started" />
+Think of zudo-ez-host as a Dropbox-style public folder for static websites. You
+choose one directory on your Mac as the **sync root**. The Mac menubar app
+watches the directories immediately inside it and publishes their contents to
+the cloud automatically.
+
+This is publication, not bidirectional file synchronization. The local
+directory remains the source of truth. The service does not download remote
+files, merge remote edits, or propagate a cloud trash back to your Mac.
+
+## Sync root, project, and hosted site
+
+The relationship is deliberately simple:
+
+```text
+chosen sync root
+├── portfolio/    -> one project -> one hosted static site
+├── presentation/ -> one project -> one hosted static site
+└── notes.txt     -> not a project
+```
+
+Only immediate child directories become projects. A nested directory is content
+within its parent project, and loose files directly in the sync root are not
+projects. The app explains that those root-level files are ignored.
+
+The project gets a canonical public URL in this exact form:
+
+```text
+https://<project-slug>--<user-handle>.<public-content-domain>/
+```
+
+The public-content domain is a separate registration chosen and purchased by a
+human owner before launch. It is intentionally different from
+`zudo-ez-host.app`, which serves the authenticated product and marketing pages.
+See [public URLs and stable identity](../concepts#public-urls-and-stable-identity)
+for the identity rules behind that address.
+
+## What happens after setup
+
+After you select the sync root and sign in through the browser, you give the Mac
+a recognizable, editable name. The app watches for changes and reconciles each
+project with its local directory. A successful publication atomically replaces
+the hosted site's complete visible version, so visitors never see a partial
+upload.
+
+Every promoted publication records both the machine's stable ID and a snapshot
+of its name at publication time. The webapp can therefore show which machine
+last updated a project. Renaming a machine changes future attribution only; it
+does not rewrite publication history.
+
+The [sync specification](../sync) describes publication and conflict handling.
+The [webapp specification](../webapp) describes project and
+machine status.
+
+## Current milestone boundary
+
+M1 is a personal MVP: one invited account, one or more named Macs, automatic
+one-way publication, visible status and errors, basic own-profile and project
+visibility, machine revocation, and public static sites on the separate content
+domain. Password gates remain unavailable in the UI until their security path
+is complete.
+
+Public signup, multi-user operations, Google login availability, richer project
+settings, password gates, rollback UI, and App Store readiness are M2 work.
+Paid plans, billing, broader administrative user management, and a possible Mac
+App Store release are M3 work. Later milestones describe intended scope, not
+features already shipped.
+
+Continue to the [core concepts and full milestone cut](../concepts).

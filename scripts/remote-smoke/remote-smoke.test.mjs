@@ -11,7 +11,7 @@ function enabledEnv(overrides = {}) {
   return {
     EZ_HOST_REMOTE_SMOKE: "1",
     EZ_HOST_REMOTE_SMOKE_ENVIRONMENT: "staging",
-    EZ_HOST_REMOTE_SMOKE_CONTROL_URL: "https://control.invalid",
+    EZ_HOST_REMOTE_SMOKE_CONTROL_URL: "https://control-staging.invalid",
     EZ_HOST_REMOTE_SMOKE_EMAIL: "remote-smoke@example.test",
     EZ_HOST_REMOTE_SMOKE_PASSWORD: SECRET,
     EZ_HOST_REMOTE_SMOKE_HANDLE: "operator",
@@ -24,11 +24,27 @@ function enabledEnv(overrides = {}) {
   };
 }
 
-function commandBoundary(calls, { cleanupRemaining = 0 } = {}) {
+function commandBoundary(
+  calls,
+  { preflightRemaining = 0, cleanupRemaining = 0, inventoryKeys = [] } = {},
+) {
+  let emailCountQueries = 0;
   return (args) => {
     calls.push(args);
     if (args.includes("--json")) {
-      return { ok: true, stdout: JSON.stringify([{ results: [{ remaining: cleanupRemaining }] }]) };
+      const command = args.at(-1);
+      if (
+        typeof command === "string" &&
+        command.includes("SELECT COUNT(*) AS remaining FROM user")
+      ) {
+        const remaining = emailCountQueries === 0 ? preflightRemaining : cleanupRemaining;
+        emailCountQueries += 1;
+        return { ok: true, stdout: JSON.stringify([{ results: [{ remaining }] }]) };
+      }
+      return {
+        ok: true,
+        stdout: JSON.stringify([{ results: inventoryKeys.map((key) => ({ key })) }]),
+      };
     }
     return { ok: true, stdout: "" };
   };
@@ -73,12 +89,18 @@ function lifecycleBoundary({ contracts = true, serve = false } = {}) {
       );
     }
     if (url.pathname === "/desktop/authorize" && (options.method ?? "GET") === "GET") {
-      return new Response("consent", { status: 200 });
+      return new Response('<form method="post" action="/desktop/authorize">', {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
     }
     if (url.pathname === "/desktop/authorize") {
+      const state = options.body.get("state");
       return new Response(null, {
         status: 303,
-        headers: { location: "http://127.0.0.1:49152/callback?code=one-time-code&state=state" },
+        headers: {
+          location: `http://127.0.0.1:49152/callback?code=one-time-code&state=${state}`,
+        },
       });
     }
     if (url.pathname === "/desktop/token")
@@ -99,6 +121,8 @@ function lifecycleBoundary({ contracts = true, serve = false } = {}) {
             stagedManifestR2Key: "projects/prj_remote/staged/att_remote",
           },
           contracts: {
+            attemptId: "att_remote",
+            projectId: "prj_remote",
             contracts: contracts
               ? [
                   {
@@ -116,10 +140,15 @@ function lifecycleBoundary({ contracts = true, serve = false } = {}) {
       );
     }
     if (url.pathname.endsWith("/verify"))
-      return Response.json({ ok: true, verifiedCount: 1, results: [{ verified: true }] });
+      return Response.json({
+        ok: true,
+        verifiedCount: 1,
+        rejectedCount: 0,
+        results: [{ contentHash: JSON.parse(options.body).objects[0].contentHash, verified: true }],
+      });
     if (url.pathname.endsWith("/publish/commit"))
       return Response.json({
-        publication: { id: "pub_remote", artifactHash: "artifact-hash" },
+        publication: { id: "pub_remote", artifactHash: "a".repeat(64) },
         committed: true,
       });
     throw new Error(`Unexpected mock path: ${url.pathname}`);
@@ -134,6 +163,24 @@ test("disabled gate exits zero and says it was skipped, not run", async () => {
   assert.deepEqual(lines, [
     "REMOTE SMOKE: SKIPPED, NOT RUN (set EZ_HOST_REMOTE_SMOKE=1 to opt in)",
   ]);
+});
+
+test("refuses a non-disposable identity before the first HTTP mutation", async () => {
+  const lines = [];
+  let fetched = false;
+  const exitCode = await runRemoteSmoke({
+    env: enabledEnv(),
+    fetchImpl: async () => {
+      fetched = true;
+      throw new Error("must not fetch");
+    },
+    commandRunner: commandBoundary([], { preflightRemaining: 1 }),
+    output: (line) => lines.push(line),
+  });
+  assert.equal(exitCode, 1);
+  assert.equal(fetched, false);
+  assert.ok(lines.includes("STEP configuration: FAILED - disposable_email_not_absent"));
+  assert.ok(lines.includes("STEP cleanup: SKIPPED - no_created_state"));
 });
 
 test("drives the lifecycle, uses a real PUT contract, and reports serving separately", async () => {
@@ -206,6 +253,35 @@ test("fails closed when prepare does not prove a missing upload and still cleans
     lines.some((line) => line === "STEP verify: PASSED - completed"),
     false,
   );
+});
+
+test("discovers storage keys through D1 after a lost prepare response", async () => {
+  const lines = [];
+  const commands = [];
+  const { fetchImpl: lifecycleFetch } = lifecycleBoundary();
+  const lostKey = "projects/prj_remote/staged/att_remote";
+  const exitCode = await runRemoteSmoke({
+    env: enabledEnv(),
+    fetchImpl: async (input, options) => {
+      const response = await lifecycleFetch(input, options);
+      if (new URL(input).pathname.endsWith("/publish/prepare")) {
+        throw new Error("simulated response loss");
+      }
+      return response;
+    },
+    commandRunner: commandBoundary(commands, { inventoryKeys: [lostKey] }),
+    output: (line) => lines.push(line),
+    uuid: () => "unique-run",
+    entropy: (size) => Buffer.alloc(size, 17),
+  });
+  assert.equal(exitCode, 1);
+  assert.ok(lines.includes("STEP prepare: FAILED - prepare_network_failed"));
+  assert.ok(
+    commands.some(
+      (args) => args[0] === "r2" && args.includes(`zudo-ez-host-artifacts-staging/${lostKey}`),
+    ),
+  );
+  assert.ok(lines.includes("STEP cleanup: PASSED - direct_r2_deletes_and_d1_absence_confirmed"));
 });
 
 test("cleanup is an independent failure verdict", async () => {

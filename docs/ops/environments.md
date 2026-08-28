@@ -132,19 +132,19 @@ environment. The email must be present in staging's `SIGNUP_ALLOWED_EMAILS`,
 and the configured handle and slug must also be disposable. The harness refuses
 production before its first request.
 
-| Name                               | Purpose                                                                                        |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `EZ_HOST_REMOTE_SMOKE=1`           | Explicitly opts into real staging mutations.                                                   |
-| `EZ_HOST_REMOTE_SMOKE_ENVIRONMENT` | Must be exactly `staging`; every other value fails closed.                                     |
-| `EZ_HOST_REMOTE_SMOKE_CONTROL_URL` | Deployed control Worker HTTPS origin, with no path, query, or embedded credentials.            |
-| `EZ_HOST_REMOTE_SMOKE_EMAIL`       | Dedicated allowlisted email; teardown uses it as the recovery identity.                        |
-| `EZ_HOST_REMOTE_SMOKE_PASSWORD`    | Disposable signup password. It is never printed or written to disk.                            |
-| `EZ_HOST_REMOTE_SMOKE_HANDLE`      | Dedicated handle to claim.                                                                     |
-| `EZ_HOST_REMOTE_SMOKE_SLUG`        | Dedicated project slug to register.                                                            |
-| `EZ_HOST_REMOTE_SMOKE_D1_DATABASE` | Staging D1 database name used by direct operator cleanup.                                      |
-| `EZ_HOST_REMOTE_SMOKE_R2_BUCKET`   | Staging R2 bucket name used by direct operator cleanup.                                        |
-| `CLOUDFLARE_ACCOUNT_ID`            | Account containing the named staging resources.                                                |
-| `CLOUDFLARE_API_TOKEN`             | Operator token with D1 edit and R2 object read/write permissions for only the staging targets. |
+| Name                               | Purpose                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `EZ_HOST_REMOTE_SMOKE=1`           | Explicitly opts into real staging mutations.                                                       |
+| `EZ_HOST_REMOTE_SMOKE_ENVIRONMENT` | Must be exactly `staging`; every other value fails closed.                                         |
+| `EZ_HOST_REMOTE_SMOKE_CONTROL_URL` | Deployed control Worker HTTPS origin whose hostname names staging; no path, query, or credentials. |
+| `EZ_HOST_REMOTE_SMOKE_EMAIL`       | Dedicated allowlisted email; teardown uses it as the recovery identity.                            |
+| `EZ_HOST_REMOTE_SMOKE_PASSWORD`    | Disposable signup password. It is never printed or written to disk.                                |
+| `EZ_HOST_REMOTE_SMOKE_HANDLE`      | Dedicated handle to claim.                                                                         |
+| `EZ_HOST_REMOTE_SMOKE_SLUG`        | Dedicated project slug to register.                                                                |
+| `EZ_HOST_REMOTE_SMOKE_D1_DATABASE` | Must be `zudo-ez-host-control-staging`; used by direct operator cleanup.                           |
+| `EZ_HOST_REMOTE_SMOKE_R2_BUCKET`   | Must be `zudo-ez-host-artifacts-staging`; used by direct operator cleanup.                         |
+| `CLOUDFLARE_ACCOUNT_ID`            | Account containing the named staging resources.                                                    |
+| `CLOUDFLARE_API_TOKEN`             | Operator token with D1 edit and R2 object read/write permissions for only the staging targets.     |
 
 `EZ_HOST_REMOTE_SMOKE_PUBLIC_URL` is optional. Set it to the exact project URL
 only when the public Worker is reachable for the configured
@@ -175,6 +175,11 @@ uses that contract for a real presigned `PUT` with the returned `Content-Type`
 and `Content-MD5` plus `If-None-Match: *`. A missing or unused contract is a
 failure. Signed URLs, cookies, passwords, machine credentials, secret values,
 and raw Wrangler output are never emitted.
+
+Before the first HTTP write, the configuration step queries staging D1 and
+requires the disposable email to be absent. An existing account, an unreadable
+preflight result, or a production-shaped URL/resource name fails without
+running cleanup, so a configuration typo cannot delete established state.
 
 ### Always-run cleanup
 

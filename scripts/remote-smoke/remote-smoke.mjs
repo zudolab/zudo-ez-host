@@ -50,6 +50,9 @@ function readConfig(env) {
   ) {
     throw new SmokeFailure("control_url_must_be_an_https_origin");
   }
+  if (!controlUrl.hostname.toLowerCase().includes("staging")) {
+    throw new SmokeFailure("control_url_must_name_staging");
+  }
   const handle = requireString(env, "EZ_HOST_REMOTE_SMOKE_HANDLE");
   const slug = requireString(env, "EZ_HOST_REMOTE_SMOKE_SLUG");
   const publicUrlValue = env.EZ_HOST_REMOTE_SMOKE_PUBLIC_URL;
@@ -57,10 +60,23 @@ function readConfig(env) {
   if (publicUrl !== null) {
     if (
       publicUrl.protocol !== "https:" ||
+      publicUrl.username !== "" ||
+      publicUrl.password !== "" ||
+      publicUrl.pathname !== "/" ||
+      publicUrl.search !== "" ||
+      publicUrl.hash !== "" ||
       publicUrl.hostname.split(".")[0] !== `${slug}--${handle}`
     ) {
       throw new SmokeFailure("public_url_project_label_mismatch");
     }
+  }
+  const d1Database = requireString(env, "EZ_HOST_REMOTE_SMOKE_D1_DATABASE");
+  const r2Bucket = requireString(env, "EZ_HOST_REMOTE_SMOKE_R2_BUCKET");
+  if (d1Database !== "zudo-ez-host-control-staging") {
+    throw new SmokeFailure("d1_database_must_be_staging");
+  }
+  if (r2Bucket !== "zudo-ez-host-artifacts-staging") {
+    throw new SmokeFailure("r2_bucket_must_be_staging");
   }
   return {
     environment,
@@ -70,8 +86,8 @@ function readConfig(env) {
     password: requireString(env, "EZ_HOST_REMOTE_SMOKE_PASSWORD", { secret: true }),
     handle,
     slug,
-    d1Database: requireString(env, "EZ_HOST_REMOTE_SMOKE_D1_DATABASE"),
-    r2Bucket: requireString(env, "EZ_HOST_REMOTE_SMOKE_R2_BUCKET"),
+    d1Database,
+    r2Bucket,
     apiToken: requireString(env, "CLOUDFLARE_API_TOKEN", { secret: true }),
     accountId: requireString(env, "CLOUDFLARE_ACCOUNT_ID"),
   };
@@ -114,7 +130,7 @@ function jsonRecord(value, code) {
 async function request(fetchImpl, url, options, expected, code) {
   let response;
   try {
-    response = await fetchImpl(url, options);
+    response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), ...options });
   } catch {
     throw new SmokeFailure(`${code}_network_failed`);
   }
@@ -190,6 +206,7 @@ function defaultCommandRunner(args, env) {
     env,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
+    timeout: 60_000,
   });
   return {
     ok: result.status === 0,
@@ -253,14 +270,18 @@ async function cleanup(state, config, commandRunner, env) {
       "staging",
       "--json",
       "--command",
-      `SELECT pa.staged_manifest_r2_key AS key FROM publication_attempts pa INNER JOIN user u ON u.id = pa.user_id WHERE u.email = ${email} UNION SELECT 'projects/' || p.id || '/content/' || pao.content_hash AS key FROM publication_attempt_objects pao INNER JOIN publication_attempts pa ON pa.id = pao.attempt_id INNER JOIN projects p ON p.id = pa.project_id INNER JOIN user u ON u.id = pa.user_id WHERE u.email = ${email} UNION SELECT 'projects/' || p.id || '/artifacts/' || pub.artifact_hash AS key FROM publications pub INNER JOIN projects p ON p.id = pub.project_id INNER JOIN user u ON u.id = p.user_id WHERE u.email = ${email}`,
+      `SELECT pa.staged_manifest_r2_key AS key FROM publication_attempts pa INNER JOIN user u ON u.id = pa.user_id WHERE u.email = ${email} UNION SELECT 'projects/' || p.id || '/content/' || pao.content_hash AS key FROM publication_attempt_objects pao INNER JOIN publication_attempts pa ON pa.id = pao.attempt_id INNER JOIN projects p ON p.id = pa.project_id INNER JOIN user u ON u.id = pa.user_id WHERE u.email = ${email} AND pao.requires_upload = 1 UNION SELECT 'projects/' || p.id || '/artifacts/' || pub.artifact_hash AS key FROM publications pub INNER JOIN projects p ON p.id = pub.project_id INNER JOIN user u ON u.id = p.user_id WHERE u.email = ${email}`,
     ],
     env,
   );
   const discoveredKeys = inventory.ok ? cleanupKeys(inventory.stdout) : null;
   if (discoveredKeys === null) ok = false;
   else for (const key of discoveredKeys) state.r2Keys.add(key);
-  for (const key of [...state.r2Keys].reverse()) {
+  const deletionRank = (key) =>
+    key.includes("/artifacts/") ? 0 : key.includes("/content/") ? 1 : 2;
+  for (const key of [...state.r2Keys].sort(
+    (left, right) => deletionRank(left) - deletionRank(right),
+  )) {
     const result = commandRunner(
       [
         "r2",
@@ -345,7 +366,31 @@ export async function runRemoteSmoke({
   };
 
   try {
-    config = await step("configuration", async () => readConfig(env));
+    config = await step("configuration", async () => {
+      const candidate = readConfig(env);
+      const preflight = commandRunner(
+        [
+          "d1",
+          "execute",
+          candidate.d1Database,
+          "--remote",
+          "--env",
+          "staging",
+          "--json",
+          "--command",
+          `SELECT COUNT(*) AS remaining FROM user WHERE email = ${sqlLiteral(candidate.email)}`,
+        ],
+        {
+          ...env,
+          CLOUDFLARE_API_TOKEN: candidate.apiToken,
+          CLOUDFLARE_ACCOUNT_ID: candidate.accountId,
+        },
+      );
+      if (!preflight.ok || remainingCount(preflight.stdout) !== 0) {
+        throw new SmokeFailure("disposable_email_not_absent");
+      }
+      return candidate;
+    });
     const origin = config.controlUrl.origin;
     state.startedAt = Date.now();
     const signup = await step("signup", async () => {
@@ -413,7 +458,9 @@ export async function runRemoteSmoke({
         "project",
       );
       const value = jsonRecord(body.project, "project_invalid_response");
-      if (typeof value.id !== "string") throw new SmokeFailure("project_invalid_response");
+      if (typeof value.id !== "string" || body.hostname !== `${config.slug}--${config.handle}`) {
+        throw new SmokeFailure("project_invalid_response");
+      }
       state.projectId = value.id;
       return value;
     });
@@ -421,21 +468,30 @@ export async function runRemoteSmoke({
     const challenge = createHash("sha256").update(verifier).digest("base64url");
     const redirectUri = "http://127.0.0.1:49152/callback";
     const authorization = await step("authorization", async () => {
+      const stateValue = uuid();
       const parameters = new URLSearchParams({
         redirect_uri: redirectUri,
         code_challenge: challenge,
         code_challenge_method: "S256",
         scope: "publish",
-        state: uuid(),
+        state: stateValue,
         machine_name: "Remote smoke",
       });
-      await request(
+      const consent = await request(
         fetchImpl,
         new URL(`/desktop/authorize?${parameters}`, origin),
         { headers: { cookie: signup.cookie }, redirect: "manual" },
         [200],
         "authorization_get",
       );
+      const consentType = consent.headers.get("content-type") ?? "";
+      const consentBody = await consent.text();
+      if (
+        !consentType.toLowerCase().startsWith("text/html") ||
+        !consentBody.includes('<form method="post" action="/desktop/authorize">')
+      ) {
+        throw new SmokeFailure("authorization_consent_invalid");
+      }
       const response = await request(
         fetchImpl,
         new URL("/desktop/authorize", origin),
@@ -456,7 +512,14 @@ export async function runRemoteSmoke({
       if (location === null) throw new SmokeFailure("authorization_code_missing");
       const callback = new URL(location);
       const code = callback.searchParams.get("code");
-      if (code === null) throw new SmokeFailure("authorization_code_missing");
+      if (
+        code === null ||
+        callback.searchParams.get("state") !== stateValue ||
+        `${callback.origin}${callback.pathname}` !== redirectUri ||
+        callback.hash !== ""
+      ) {
+        throw new SmokeFailure("authorization_code_missing");
+      }
       return code;
     });
     const machineToken = await step("token", async () => {
@@ -510,8 +573,11 @@ export async function runRemoteSmoke({
       const attempt = jsonRecord(body.attempt, "prepare_invalid_response");
       const page = jsonRecord(body.contracts, "prepare_invalid_response");
       if (
+        body.created !== true ||
         typeof attempt.id !== "string" ||
-        typeof attempt.stagedManifestR2Key !== "string" ||
+        attempt.stagedManifestR2Key !== `projects/${project.id}/staged/${attempt.id}` ||
+        page.attemptId !== attempt.id ||
+        page.projectId !== project.id ||
         !Array.isArray(page.contracts)
       ) {
         throw new SmokeFailure("prepare_invalid_response");
@@ -530,7 +596,7 @@ export async function runRemoteSmoke({
           contract.sizeBytes !== bytes.length ||
           contract.contentType !== transport[0].contentType ||
           contract.contentMd5 !== contentMd5 ||
-          typeof contract.key !== "string" ||
+          contract.key !== `projects/${project.id}/content/${contentHash}` ||
           typeof contract.uploadUrl !== "string"
         )
           throw new SmokeFailure("upload_contract_invalid");
@@ -571,7 +637,17 @@ export async function runRemoteSmoke({
         [200],
         "verify",
       );
-      if (body.ok !== true || body.verifiedCount < 1)
+      const results = Array.isArray(body.results) ? body.results : [];
+      const verified =
+        results.length === 1 ? jsonRecord(results[0], "verification_not_proven") : null;
+      if (
+        body.ok !== true ||
+        body.verifiedCount !== 1 ||
+        body.rejectedCount !== 0 ||
+        verified === null ||
+        verified.contentHash !== contentHash ||
+        verified.verified !== true
+      )
         throw new SmokeFailure("verification_not_proven");
     });
     await step("commit", async () => {
@@ -587,7 +663,12 @@ export async function runRemoteSmoke({
         "commit",
       );
       const publication = jsonRecord(body.publication, "commit_invalid_response");
-      if (typeof publication.id !== "string" || typeof publication.artifactHash !== "string")
+      if (
+        typeof publication.id !== "string" ||
+        typeof publication.artifactHash !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(publication.artifactHash) ||
+        body.committed !== true
+      )
         throw new SmokeFailure("commit_invalid_response");
       state.publicationId = publication.id;
       state.r2Keys.add(`projects/${project.id}/artifacts/${publication.artifactHash}`);

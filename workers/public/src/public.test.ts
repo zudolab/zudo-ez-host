@@ -31,6 +31,7 @@ import {
   createPublicHandler,
   parsePublicHost,
   type PublicationResolverBinding,
+  type PublicServingDiagnostic,
 } from "./index.js";
 
 const PUBLIC_BASE_DOMAIN = "public.test";
@@ -99,6 +100,17 @@ function manifest(entries: readonly ManifestEntry[]): Manifest {
 
 function publicRequest(path: string, init?: RequestInit): Request {
   return new Request(`https://${PUBLIC_LABEL}.${PUBLIC_BASE_DOMAIN}${path}`, init);
+}
+
+function publicRequestWithRawTarget(path: string, init?: RequestInit): Request {
+  const request = publicRequest(path, init);
+  // WHATWG URL construction removes encoded dot segments before a synthetic
+  // Request reaches the handler. Shadow only the test request's URL so the
+  // workerd handler sees the raw edge target that the resolver must reject.
+  Object.defineProperty(request, "url", {
+    value: `https://${PUBLIC_LABEL}.${PUBLIC_BASE_DOMAIN}${path}`,
+  });
+  return request;
 }
 
 function publicRequestFor(label: string, path: string, init?: RequestInit): Request {
@@ -268,6 +280,48 @@ function fixtureResolver(): PublicationResolverBinding {
   };
 }
 
+function diagnosticCollector(): {
+  readonly diagnostics: PublicServingDiagnostic[];
+  readonly logDiagnostic: (diagnostic: PublicServingDiagnostic) => void;
+} {
+  const diagnostics: PublicServingDiagnostic[] = [];
+  return {
+    diagnostics,
+    logDiagnostic(diagnostic) {
+      diagnostics.push(diagnostic);
+    },
+  };
+}
+
+function arrayBufferFor(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer as ArrayBuffer;
+}
+
+function manifestObject(
+  entries: readonly ManifestEntry[],
+  options: { readonly size?: number; readonly bytes?: Uint8Array } = {},
+): NonNullable<Awaited<ReturnType<ReadOnlyR2Bucket["get"]>>> {
+  const bytes = options.bytes ?? encodeCanonical(manifest(entries));
+  return {
+    size: options.size ?? bytes.byteLength,
+    async arrayBuffer() {
+      return arrayBufferFor(bytes);
+    },
+  };
+}
+
+async function responseFingerprint(response: Response): Promise<{
+  readonly status: number;
+  readonly body: string;
+  readonly headers: Record<string, string>;
+}> {
+  return {
+    status: response.status,
+    body: await response.text(),
+    headers: Object.fromEntries(response.headers),
+  };
+}
+
 describe("public Worker", () => {
   it("uses the real local R2 binding", async () => {
     await env.ARTIFACTS.put("public-binding-probe", "r2-ok");
@@ -388,7 +442,7 @@ describe("public Worker", () => {
   });
 
   it("returns an empty HEAD body while retaining artifact headers", async () => {
-    await seedArtifact([{ ...entry("dir/index.html", DIRECTORY_SHA), size: 9 }]);
+    await seedArtifact([{ ...entry("dir/index.html", DIRECTORY_SHA), size: 99 }]);
     const handler = createPublicHandler({
       publicBaseDomain: PUBLIC_BASE_DOMAIN,
       resolver: fixtureResolver(),
@@ -403,6 +457,22 @@ describe("public Worker", () => {
     expect(response.headers.get("Content-Type")).toBe("text/html");
     expect(response.headers.get("Content-Length")).toBe("9");
     expect(response.headers.get("ETag")).toBe(createArtifactEtag(ARTIFACT_HASH, "dir/index.html"));
+  });
+
+  it("uses the stored object's byte length when it diverges from the manifest", async () => {
+    await seedArtifact([{ ...entry("index.html", ROOT_SHA), size: 99 }]);
+    const handler = createPublicHandler({
+      publicBaseDomain: PUBLIC_BASE_DOMAIN,
+      resolver: fixtureResolver(),
+      artifacts: createReadOnlyR2Facade(env.ARTIFACTS),
+      cache: new MemoryCache(),
+    });
+
+    const response = await handler.fetch(publicRequest("/"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Length")).toBe("4");
+    await expect(response.text()).resolves.toBe("root");
   });
 
   it("maps every cache policy category", () => {
@@ -435,6 +505,177 @@ describe("public Worker", () => {
 
     expect(response.status).toBe(404);
     await expect(response.text()).resolves.toBe("Not found");
+  });
+
+  it("keeps gated publications dark until a gate verifier exists", async () => {
+    const cache = new MemoryCache();
+    const artifacts = {
+      get: vi.fn(async () => null),
+      head: vi.fn(async () => null),
+    } satisfies ReadOnlyR2Bucket;
+    const { diagnostics, logDiagnostic } = diagnosticCollector();
+    const handler = createPublicHandler({
+      publicBaseDomain: PUBLIC_BASE_DOMAIN,
+      resolver: {
+        resolvePublication: vi.fn(async () => ({
+          ...fixtureResolution(),
+          servingFlags: { spaFallback: false, gated: true },
+        })),
+      },
+      artifacts,
+      cache,
+      logDiagnostic,
+    });
+
+    const response = await handler.fetch(publicRequest("/"));
+
+    expect(await responseFingerprint(response)).toEqual({
+      status: 404,
+      body: "Not found",
+      headers: {
+        "cache-control": "no-store",
+        "content-type": "text/plain;charset=UTF-8",
+        "x-content-type-options": "nosniff",
+      },
+    });
+    expect(artifacts.get).not.toHaveBeenCalled();
+    expect(artifacts.head).not.toHaveBeenCalled();
+    expect(cache.matchCount).toBe(0);
+    expect(cache.putCount).toBe(0);
+    expect(diagnostics).toEqual([
+      { event: "public_serving_failure", cause: "gate_verification_unavailable" },
+    ]);
+  });
+
+  it.each([
+    ["malformed encoding", "/bad%2", "malformed_encoding", false],
+    ["encoded separator", "/safe%2fsecret", "encoded_separator", false],
+    ["NUL", "/bad%00name", "nul_byte", false],
+    ["encoded dot segments", "/docs/%2E%2E/secret", "dot_segment", true],
+    ["dot-prefixed segment", "/.env/config", "dot_prefixed_segment", false],
+  ] as const)("rejects %s with a uniform non-cached response", async (_name, path, reason, raw) => {
+    await seedArtifact([]);
+    const cache = new MemoryCache();
+    const { diagnostics, logDiagnostic } = diagnosticCollector();
+    const handler = createPublicHandler({
+      publicBaseDomain: PUBLIC_BASE_DOMAIN,
+      resolver: fixtureResolver(),
+      artifacts: createReadOnlyR2Facade(env.ARTIFACTS),
+      cache,
+      logDiagnostic,
+    });
+
+    const response = await handler.fetch(
+      raw ? publicRequestWithRawTarget(path) : publicRequest(path),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.text()).resolves.toBe("Not found");
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(cache.matchCount).toBe(0);
+    expect(cache.putCount).toBe(0);
+    expect(diagnostics).toEqual([
+      {
+        event: "public_serving_failure",
+        cause: "path_rejected",
+        pathRejectionReason: reason,
+      },
+    ]);
+  });
+
+  it("separates internal failure causes without changing the public response", async () => {
+    const canonicalEmptyManifest = manifestObject([]);
+    const canonicalRootManifest = manifestObject([{ ...entry("index.html", ROOT_SHA), size: 4 }]);
+    const cases: readonly {
+      readonly name: string;
+      readonly cause: PublicServingDiagnostic["cause"];
+      readonly resolver: PublicationResolverBinding;
+      readonly artifacts: ReadOnlyR2Bucket;
+      readonly path?: string;
+    }[] = [
+      {
+        name: "resolver throw",
+        cause: "publication_resolver_error",
+        resolver: { resolvePublication: vi.fn(async () => Promise.reject(new Error("offline"))) },
+        artifacts: { get: vi.fn(async () => null), head: vi.fn(async () => null) },
+      },
+      {
+        name: "malformed resolution",
+        cause: "publication_resolution_invalid",
+        resolver: {
+          resolvePublication: vi.fn(
+            async () => ({ projectId: "bad/slash" }) as unknown as PublicationResolution,
+          ),
+        },
+        artifacts: { get: vi.fn(async () => null), head: vi.fn(async () => null) },
+      },
+      {
+        name: "missing manifest",
+        cause: "manifest_missing",
+        resolver: fixtureResolver(),
+        artifacts: { get: vi.fn(async () => null), head: vi.fn(async () => null) },
+      },
+      {
+        name: "oversized manifest",
+        cause: "manifest_oversized",
+        resolver: fixtureResolver(),
+        artifacts: {
+          get: vi.fn(async () => manifestObject([], { size: MAX_CANONICAL_MANIFEST_BYTES + 1 })),
+          head: vi.fn(async () => null),
+        },
+      },
+      {
+        name: "non-canonical manifest",
+        cause: "manifest_invalid",
+        resolver: fixtureResolver(),
+        artifacts: {
+          get: vi.fn(async () => manifestObject([], { bytes: new Uint8Array([0xff]) })),
+          head: vi.fn(async () => null),
+        },
+      },
+      {
+        name: "R2 content miss",
+        cause: "content_missing",
+        resolver: fixtureResolver(),
+        artifacts: {
+          get: vi.fn(async (key: string) =>
+            key === artifactManifestKey(PROJECT_ID, ARTIFACT_HASH) ? canonicalRootManifest : null,
+          ),
+          head: vi.fn(async () => null),
+        },
+      },
+      {
+        name: "ordinary unknown path",
+        cause: "path_not_found",
+        resolver: fixtureResolver(),
+        artifacts: {
+          get: vi.fn(async () => canonicalEmptyManifest),
+          head: vi.fn(async () => null),
+        },
+        path: "/missing",
+      },
+    ];
+    let expectedPublicResponse: Awaited<ReturnType<typeof responseFingerprint>> | undefined;
+
+    for (const testCase of cases) {
+      const { diagnostics, logDiagnostic } = diagnosticCollector();
+      const handler = createPublicHandler({
+        publicBaseDomain: PUBLIC_BASE_DOMAIN,
+        resolver: testCase.resolver,
+        artifacts: testCase.artifacts,
+        cache: new MemoryCache(),
+        logDiagnostic,
+      });
+
+      const publicResponse = await responseFingerprint(
+        await handler.fetch(publicRequest(testCase.path ?? "/")),
+      );
+      expectedPublicResponse ??= publicResponse;
+      expect(publicResponse, testCase.name).toEqual(expectedPublicResponse);
+      expect(diagnostics, testCase.name).toEqual([
+        { event: "public_serving_failure", cause: testCase.cause },
+      ]);
+    }
   });
 
   it("rejects hosts outside the configured suffix or with nested labels", async () => {

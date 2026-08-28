@@ -161,11 +161,12 @@ observability work without a V1 capability benefit.
   platform 404 reveals no project state;
 - normalized paths reject malformed encoding, NUL, backslash, encoded
   separators, dot segments, symlinks, and portable case/normalization
-  collisions;
+  collisions; request-path rejections return the same generic, `no-store` 404
+  response as an ordinary missing path;
 - platform-derived MIME metadata is stored in the manifest, unknown types are
   `application/octet-stream`, and responses set `X-Content-Type-Options:
-nosniff`;
-
+nosniff`; response framing uses the stored R2 object's byte length rather than
+  trusting the manifest size;
 - SPA fallback defaults off. A reserved explicit project flag may enable it
   only for unmatched HTML navigation; missing asset-like requests remain 404;
 - dot-prefixed segments are excluded by default. A future exact allowlist may

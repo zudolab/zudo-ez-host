@@ -5,8 +5,17 @@ describe("control Worker", () => {
   it("dispatches through the Hono app", async () => {
     const response = await exports.default.fetch("https://control.test/health");
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ service: "control", status: "ok" });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      service: "control",
+      status: "not_ready",
+      checks: {
+        d1: true,
+        r2: true,
+        betterAuthSecret: false,
+        uploadSigner: false,
+      },
+    });
   });
 
   it("uses the real local D1 and R2 bindings", async () => {

@@ -18,4 +18,5 @@ export { PublicationResolver };
 export default createControlApp({
   prepare: { signer: localTestSigner },
   contracts: { signer: localTestSigner },
+  health: { uploadSignerConfigured: true },
 });

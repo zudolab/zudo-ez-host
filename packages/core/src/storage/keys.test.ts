@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { artifactManifestKey, contentKey, stagedManifestKey } from "./keys.js";
+import {
+  artifactManifestKey,
+  contentKey,
+  immutableContentKey,
+  promotedArtifactManifestKey,
+  stagedManifestKey,
+} from "./keys.js";
 
 describe("R2 key layout", () => {
   it("uses the exact project-scoped content, staged, and artifact prefixes", () => {
@@ -11,6 +17,11 @@ describe("R2 key layout", () => {
     expect(artifactManifestKey("project-1", "artifact-hash")).toBe(
       "projects/project-1/artifacts/artifact-hash",
     );
+  });
+
+  it("keeps the descriptive key aliases equivalent to their canonical helpers", () => {
+    expect(immutableContentKey).toBe(contentKey);
+    expect(promotedArtifactManifestKey).toBe(artifactManifestKey);
   });
 
   it("rejects path traversal and empty key segments", () => {

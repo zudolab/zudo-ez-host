@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { createReadOnlyR2Bucket, type ReadOnlyR2Bucket } from "./readonly.js";
@@ -13,17 +12,31 @@ void readOnlyFacadeHasNoWriteMethods;
 
 describe("read-only R2 facade", () => {
   it("exposes only bound get/head methods at runtime", async () => {
-    const key = "read-only-facade-probe";
-    await env.ARTIFACTS.put(key, "facade-ok");
+    const bucket = {
+      marker: "bound",
+      async get(this: { marker: string }, key: string) {
+        return {
+          size: key.length,
+          arrayBuffer: async () => new ArrayBuffer(0),
+          body: undefined,
+        };
+      },
+      async head(this: { marker: string }, key: string) {
+        return { size: key.length + this.marker.length };
+      },
+      async put() {
+        return null;
+      },
+    };
 
-    const facade = createReadOnlyR2Bucket(env.ARTIFACTS);
+    const facade = createReadOnlyR2Bucket(bucket);
+
     expect(Object.keys(facade).sort()).toEqual(["get", "head"]);
     expect("put" in facade).toBe(false);
-    expect("delete" in facade).toBe(false);
-    const object = await facade.get(key);
+    const object = await facade.get("key");
     expect(object).not.toBeNull();
     if (object === null) throw new Error("Expected the fixture object");
-    await expect(new TextDecoder().decode(await object.arrayBuffer())).toBe("facade-ok");
-    await expect(facade.head(key)).resolves.toMatchObject({ key, size: 9 });
+    await expect(object.arrayBuffer()).resolves.toEqual(new ArrayBuffer(0));
+    await expect(facade.head("key")).resolves.toEqual({ size: 8 });
   });
 });

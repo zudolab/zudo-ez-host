@@ -1,21 +1,19 @@
 import type {
   ManifestEntryLookup,
   PublicationResolution,
+  ReadOnlyR2Bucket,
   ServingDecision,
 } from "@zudo-ez-host/core";
 import {
   MAX_CANONICAL_MANIFEST_BYTES,
+  artifactManifestKey,
   createManifestLookup,
+  createReadOnlyR2Facade,
   decodeManifest,
   parseLabel,
   resolveServing,
+  contentKey,
 } from "@zudo-ez-host/core";
-
-import { artifactManifestKey, contentKey } from "../../control/src/storage/keys.js";
-import {
-  createReadOnlyR2Facade,
-  type ReadOnlyR2Bucket,
-} from "../../control/src/storage/readonly.js";
 
 /** The narrow RPC surface consumed by the public responder. */
 export interface PublicationResolverBinding {

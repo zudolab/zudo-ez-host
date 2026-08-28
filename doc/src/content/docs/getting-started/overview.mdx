@@ -1,9 +1,27 @@
 ---
-title: Getting started
-description: A short introduction to the zudo-ez-host documentation.
-sidebar_position: 2
+title: Documentation overview
+description: Choose a path through the zudo-ez-host product, developer, and operator documentation.
+sidebar_position: 1
 ---
 
-The detailed product and architecture guides will be added in the next
-documentation wave. For now, this site is the home for the project's evolving
-specification.
+This documentation separates product contracts from the instructions used to
+develop and operate the Workers. Start with the path that matches your role.
+
+## Choose a path
+
+- Read the [core concepts](../concepts/) to understand projects, machines,
+  public URLs, and milestone boundaries.
+- Follow [Getting started](./) for the Dropbox-style product model and the
+  relationship between a local sync root and a hosted site.
+- Use [Local development](./development/) to install dependencies, run both
+  Workers, apply local migrations, and choose a test lane.
+- Use the [deployment runbook](../hosting/deployment/) only when you are an
+  authenticated operator provisioning Cloudflare resources.
+
+## Read the contracts
+
+The [hosting architecture](../hosting/) explains the trust boundary, while
+the [sync protocol](../sync/) explains manifests, immutable uploads, and
+atomic publication. The [webapp specification](../webapp/) describes
+account, project, and machine surfaces without implying that deferred features
+are shipped.

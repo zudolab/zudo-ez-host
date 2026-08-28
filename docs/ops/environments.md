@@ -7,44 +7,60 @@ secrets, D1 databases, R2 buckets, or service bindings into named environments.
 
 `scripts/env-requirements.json` is the machine-readable form of the tables below.
 `node scripts/check-environment-config.mjs` checks that it remains aligned with
-both Wrangler files and enforces the cross-Worker resource topology.
+both Wrangler files and enforces the cross-Worker resource topology. The
+step-by-step operator guide is
+`doc/src/content/docs/hosting/deployment.mdx`; this reference records the
+environment contract and smoke cleanup details.
+
+No local check, dry run, or skipped smoke claims that a real Cloudflare
+deployment exists.
 
 ## Provisioning before the first deploy
 
 Agent and CI work is credential-free. An authenticated operator performs these
 steps once per environment:
 
-1. Create `zudo-ez-host-control-staging` and
+1. Authenticate Wrangler with the account that owns the target resources, for
+   example `pnpm --dir workers/control exec wrangler whoami`.
+2. Create `zudo-ez-host-control-staging` and
    `zudo-ez-host-control-production` D1 databases. Replace the all-zero
    `database_id` in the matching `[[env.*.d1_databases]]` block with the ID
    returned by Wrangler. The all-zero values are explicit provisioning markers;
    a deploy must not proceed with them.
-2. Create the private `zudo-ez-host-artifacts-staging` and
+3. Create the private `zudo-ez-host-artifacts-staging` and
    `zudo-ez-host-artifacts-production` R2 buckets. Keep public bucket access and
    `r2.dev` disabled.
-3. Replace `YOUR_CLOUDFLARE_ACCOUNT_ID`, `YOUR_WORKERS_SUBDOMAIN`,
+4. Replace `YOUR_CLOUDFLARE_ACCOUNT_ID`, `YOUR_WORKERS_SUBDOMAIN`,
    `YOUR_CONTROL_DOMAIN`, and `YOUR_PUBLIC_DOMAIN` in the applicable environment.
    The account ID is a non-secret identifier used to form the R2 S3 endpoint.
-4. For staging on `workers.dev`, name the public Worker after the one smoke
+   For the first staging control deploy, use the temporary `.invalid` bootstrap
+   values and then complete the mandatory account-subdomain second pass in the
+   deployment runbook before deploying public.
+5. For staging on `workers.dev`, name the public Worker after the one smoke
    project's exact `<slug>--<handle>` label. The committed `smoke--operator`
    name is only the default smoke identity; change it if the provisioned project
    differs. `PUBLIC_BASE_DOMAIN` is the account's
    `<subdomain>.workers.dev`, without that project label.
-5. Production needs a separate registrable public-content domain with a wildcard
+6. Production needs a separate registrable public-content domain with a wildcard
    DNS/Worker route and a control-plane domain. The committed production route
    descriptors become active after the domain placeholders are replaced; create
    the required zone/DNS state before deploying them. Never silently treat the
    conventional production Worker name on `workers.dev` as a valid tenant
    hostname.
-6. Create a bucket-scoped R2 API token, then use interactive Wrangler prompts to
-   set each secret below, for example:
+7. Create a bucket-scoped R2 API token, then use interactive Wrangler prompts to
+   set each secret below on an already deployed Worker, for example:
 
    ```sh
    pnpm --dir workers/control exec wrangler secret put BETTER_AUTH_SECRET --env staging
+   pnpm --dir workers/control exec wrangler secret put SIGNUP_ALLOWED_EMAILS --env staging
+   pnpm --dir workers/control exec wrangler secret put R2_ACCESS_KEY_ID --env staging
+   pnpm --dir workers/control exec wrangler secret put R2_SECRET_ACCESS_KEY --env staging
    ```
 
    Do not place secret values in Wrangler TOML, shell history, or committed
-   files.
+   files. For a first Worker version, pass a temporary secret file to
+   `wrangler deploy --secrets-file` as described in the deployment runbook;
+   required secrets cannot be inherited before that first version exists.
 
 After substitution, run the invariant check and a credential-free validation:
 
@@ -54,8 +70,10 @@ pnpm --dir workers/control exec wrangler deploy --dry-run --env staging
 pnpm --dir workers/public exec wrangler deploy --dry-run --env staging
 ```
 
-Repeat the dry runs with `--env production`. Actual deploys remain
-operator-invoked and are outside the repository verification gate.
+Repeat the dry runs with `--env production`. Use `pnpm deploy:staging` or
+`pnpm deploy:production` for the ordered control-before-public deployment after
+the matching migration completes. Actual deploys remain operator-invoked and
+are outside the repository verification gate.
 
 ## D1 migrations
 
@@ -117,8 +135,12 @@ workerd fixture so a first deployment cannot deadlock on itself.
 
 Copy each Worker's `.dev.vars.example` to `.dev.vars` and replace its placeholder
 values. `.dev.vars` is ignored and must never be committed. The examples contain
-no credentials. Prefer the top-level Wrangler defaults unless local development
-is specifically exercising the signer or authentication configuration.
+no production credentials. For the full local install, migration, two-Worker
+startup, and test-lane instructions, see
+`doc/src/content/docs/getting-started/development.mdx`. Prefer the top-level
+Wrangler defaults unless local development is specifically exercising the signer
+or authentication configuration; never put a production R2 token in a local
+file.
 
 ## Gated remote smoke
 

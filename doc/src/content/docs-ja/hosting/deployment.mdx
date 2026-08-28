@@ -1,0 +1,314 @@
+---
+title: デプロイ手順
+description: Cloudflare resource を provision し、2 つの Worker を安全に deploy して staging path を確認します。
+sidebar_position: 4
+---
+
+この runbook は authenticated operator 向けです。ここで説明するのは deploy
+path であり、staging や production の deployment がすでに存在することは意味
+しません。local check、dry run、skip された smoke は deployment の evidence では
+ありません。
+
+commit 済みの Wrangler file は 2 つの named environment の source of truth です。
+top-level configuration は local/workerd fixture として保ち、environment の変更は
+`workers/control/wrangler.toml` と `workers/public/wrangler.toml` に行います。
+environment inventory と Cross-Worker invariant は `docs/ops/environments.md` に
+記録されています。
+
+:::warning[credential と live data を保護する]
+disposable な staging identity と bucket-scoped R2 token を使用します。secret を
+Wrangler file、shell command、commit、log に決して置かないでください。この
+runbook の command は実行すると実際の D1、R2、Worker state を作成します。
+:::
+
+## Deployment boundary
+
+deploy 可能な Worker は 2 つあります。
+
+- **Control** は authentication、project、publication state、presigned upload
+  signer を所有します。先に deploy します。
+- **Public** は private R2 bucket の promoted artifact を配信します。その
+  `CONTROL` service binding は、すでに deploy 済みの control Worker を呼ぶため、
+  後に deploy します。
+
+named `staging` と `production` environment は binding を完全に再宣言します。
+top-level の `PUBLICATION_RESOLVER` self-binding は local workerd test 専用であり、
+deploy environment に決してコピーしません。
+
+## Authenticate and choose a target
+
+repository の toolchain を install し、target resource を所有する Cloudflare account
+で Wrangler を authenticate します。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --dir workers/control exec wrangler whoami
+```
+
+staging には別の Cloudflare account、または明確に disposable な resource を使用
+してください。configuration に commit されている resource name は次のとおりです。
+
+| Environment  | Control D1                        | Artifact R2 bucket                  |
+| ------------ | --------------------------------- | ----------------------------------- |
+| `staging`    | `zudo-ez-host-control-staging`    | `zudo-ez-host-artifacts-staging`    |
+| `production` | `zudo-ez-host-control-production` | `zudo-ez-host-artifacts-production` |
+
+## Provision D1 and R2
+
+D1 database は一度だけ作成します。Wrangler が返す `database_id` を保存し、対応する
+`env.staging` または `env.production` block の all-zero `database_id` を
+`workers/control/wrangler.toml` で置き換えます。all-zero value は provisioning
+marker であり、使用可能な database ではありません。
+
+```sh
+pnpm --dir workers/control exec wrangler d1 create zudo-ez-host-control-staging
+pnpm --dir workers/control exec wrangler d1 create zudo-ez-host-control-production
+```
+
+存在しない場合は private R2 bucket を作成します。
+
+```sh
+pnpm --dir workers/control exec wrangler r2 bucket create zudo-ez-host-artifacts-staging
+pnpm --dir workers/control exec wrangler r2 bucket create zudo-ez-host-artifacts-production
+```
+
+public bucket access と `r2.dev` は disabled のままにします。同じ environment では
+control と public の `ARTIFACTS` binding が同じ bucket を指し、staging と production
+は分離されなければなりません。
+
+## Fill the environment descriptors
+
+preflight を実行する前に、該当するすべての `YOUR_*` value を置き換えます。
+`vars` は encrypted ではないため、domain、ID、その他の non-secret configuration
+だけを置きます。
+
+- `R2_ACCOUNT_ID` は R2 bucket を所有する Cloudflare account ID です。
+- `R2_BUCKET_NAME` は正確な artifact bucket name で、control Worker の `ARTIFACTS`
+  binding と一致しなければなりません。
+- `CONTROL_BASE_DOMAIN` は scheme や path を含まない control Worker host です。
+  `BETTER_AUTH_BASE_URL` はこの host に `https://` を付けたものと完全一致します。
+- `BETTER_AUTH_TRUSTED_ORIGINS` は exact origin の comma-separated list です。
+  control origin を含め、path、wildcard、public-content origin を含めてはいけません。
+- `PUBLIC_BASE_DOMAIN` は public Worker が使用する host suffix です。staging では
+  account の `<subdomain>.workers.dev` suffix、production では別途購入した
+  public-content domain です。
+- `PUBLIC_CONTENT_DOMAIN` は canonical project URL の suffix です。single workers.dev
+  smoke identity の staging では同じ suffix、production では選択した public-content
+  domain です。
+
+production には 2 つの registrable domain が必要です。authenticated control domain と、
+それとは別の public-content domain です。対応する zone に control custom domain と
+public wildcard DNS/Worker route を作成し、one-label TLS coverage を確認してから
+production route descriptor の placeholder を置き換えます。通常の production Worker
+name を `workers.dev` の tenant hostname として使わないでください。public host は
+[hosting security contract](./security/) が要求する正確な
+`<slug>--<handle>` label でなければなりません。
+
+staging は `workers.dev` を使用します。commit 済みの public Worker name
+`smoke--operator` は disposable smoke project 用の default にすぎません。public
+Worker を deploy する前に、`workers/public/wrangler.toml` の `env.staging.name` を
+smoke に使用する正確な `<slug>--<handle>` label に変更します。
+
+## Create the R2 API token and set secrets
+
+control Worker は S3-compatible R2 credential で direct upload を sign します。
+Cloudflare dashboard の **R2 → Overview → Manage API Tokens** を開き、account または
+user API token を **Object Read & Write** で作成し、片方の environment の artifact
+bucket だけに scope します。表示された Access Key ID と Secret Access Key を保存して
+ください。secret は再表示されません。endpoint は
+`https://<ACCOUNT_ID>.r2.cloudflarestorage.com` です。
+
+dashboard の permission name と bucket scope の選択肢は、[Cloudflare R2 API token
+guide](https://developers.cloudflare.com/r2/api/tokens/)を参照してください。
+
+可能なら environment ごとに token を分けます。すでに deploy 済みの control Worker
+では、4 つの必須 secret を interactive な Wrangler prompt で設定し、production では
+`--env production` に置き換えて同じ command を繰り返します。
+
+```sh
+pnpm --dir workers/control exec wrangler secret put BETTER_AUTH_SECRET --env staging
+pnpm --dir workers/control exec wrangler secret put SIGNUP_ALLOWED_EMAILS --env staging
+pnpm --dir workers/control exec wrangler secret put R2_ACCESS_KEY_ID --env staging
+pnpm --dir workers/control exec wrangler secret put R2_SECRET_ACCESS_KEY --env staging
+```
+
+`BETTER_AUTH_SECRET` は high-entropy value にします。`SIGNUP_ALLOWED_EMAILS` は invited
+M1 account 用の private comma-separated allowlist です。2 つの R2 secret は token
+credential であり、operator cleanup 用の別の Cloudflare API token ではありません。
+value は Wrangler の prompt または承認済み secret manager にだけ入力し、command-line
+argument として渡さないでください。
+
+まだ deploy 済み version がない Worker では、first deploy の required secret を inherit
+できません。4 つの value を repository 外の temporary `.env` または JSON file に、制限
+された permission で保存し、first control deploy にその file を渡します。
+
+```sh
+pnpm --dir workers/control exec wrangler deploy --config wrangler.toml --env staging --secrets-file /secure/operator/staging-secrets.env
+```
+
+`.env` secrets file には、次の name と operator が指定する value を含めます。
+
+```dotenv
+BETTER_AUTH_SECRET=<high-entropy-auth-secret>
+SIGNUP_ALLOWED_EMAILS=<comma-separated-invited-emails>
+R2_ACCESS_KEY_ID=<bucket-scoped-r2-access-key>
+R2_SECRET_ACCESS_KEY=<bucket-scoped-r2-secret-key>
+```
+
+この file は input だけに使用し、repository artifact にはしません。first deploy 後は
+secret manager の lifecycle に従って削除し、value を表示しないでください。Worker に
+deploy 済み version ができた後は、`wrangler secret put` で value を command line に
+置かずに 1 つずつ更新できます。
+
+Google OAuth は M1 deployment の requirement ではありません。後続 milestone が provider
+を明示的に enable するまで、Google credential を environment に追加しないでください。
+
+## Apply migrations before deploying
+
+database が存在したら control Worker の D1 migration を適用し、control Worker を
+deploy する前に完了させます。実 target 用の script は `--remote` と named environment
+の両方を意図的に含みます。
+
+```sh
+# Local development
+pnpm --dir workers/control db:migrate:local
+
+# Staging
+pnpm --dir workers/control db:migrate:staging
+
+# Production
+pnpm --dir workers/control db:migrate:production
+```
+
+一度に 1 target だけ実行し、すべての migration が成功したことを確認します。
+top-level の local database を staging や production の代わりに使わないでください。
+
+## Staging bootstrap and the base-URL second pass
+
+`workers.dev` で最初に staging deploy を行う場合、account subdomain は Wrangler が
+最初の Worker URL を作成または報告するまで分かりません。unknown な staging domain
+value には、最初の **control** deploy の間だけ temporary な予約済み `.invalid` origin
+を使用します。repository preflight が実行できるよう、control と public descriptor
+の unknown value を次の non-empty bootstrap value に置き換えます。
+
+```toml
+BETTER_AUTH_BASE_URL = "https://bootstrap.invalid"
+BETTER_AUTH_TRUSTED_ORIGINS = "https://bootstrap.invalid"
+CONTROL_BASE_DOMAIN = "bootstrap.invalid"
+PUBLIC_BASE_DOMAIN = "bootstrap.invalid"
+PUBLIC_CONTENT_DOMAIN = "bootstrap.invalid"
+```
+
+これは使用可能な endpoint ではありません。account を invite したり smoke を実行
+したりしないでください。D1 ID、R2 bucket、first-deploy secret file を用意したら、
+validation を行い control だけを deploy します。
+
+```sh
+node scripts/check-environment-config.mjs
+pnpm preflight:staging
+pnpm --dir workers/control exec wrangler deploy --config wrangler.toml --env staging --secrets-file /secure/operator/staging-secrets.env
+```
+
+Wrangler output にある URL、例えば
+`https://zudo-ez-host-control-staging.<account-subdomain>.workers.dev` を読み取り、
+ただちに必須の second pass を行います。
+
+1. `CONTROL_BASE_DOMAIN` を完全な control Worker host に設定し、
+   `BETTER_AUTH_BASE_URL` と `BETTER_AUTH_TRUSTED_ORIGINS` を exact HTTPS origin に
+   設定します。
+2. `PUBLIC_BASE_DOMAIN` と `PUBLIC_CONTENT_DOMAIN` を project label なしの account
+   の `<account-subdomain>.workers.dev` suffix に設定します。
+3. 同じ suffix を staging public Worker の `PUBLIC_BASE_DOMAIN` に設定します。
+4. public Worker name を disposable smoke project の正確な `<slug>--<handle>` label
+   に設定します。
+
+second pass は必須です。bootstrap control Worker は authentication や serving が動作
+する evidence ではありません。
+
+## Deploy control, then public
+
+staging の second pass 後、または production domain と route を設定した後に、invariant
+check と credential-free dry run を行います。
+
+```sh
+node scripts/check-environment-config.mjs
+pnpm --dir workers/control exec wrangler deploy --dry-run --env staging
+pnpm --dir workers/public exec wrangler deploy --dry-run --env staging
+```
+
+production の dry run では `--env production` を使用します。その後、repository の
+deploy script を使います。script は manifest-driven preflight を実行し、control を
+public より先に deploy します。
+
+```sh
+pnpm deploy:staging
+pnpm deploy:production
+```
+
+変更する environment の command だけを実行します。preflight はどちらの Worker も
+開始する前に、未解決の variable と未宣言の secret をすべて報告します。Wrangler が
+remote secret の存在を最終確認します。public Worker は `CONTROL` service binding が
+既存の control Worker と `PublicationResolver` entrypoint を要求するため 2 番目で
+なければなりません。この順序により、control Worker の test-only self-binding が新規
+account で deadlock することも避けられます。
+
+fresh な production account では、上記の temporary secrets file を使い、production
+config に `--env production` を指定して first control version を作成します。その後
+`pnpm deploy:production` を実行し、通常の preflight と control-before-public の順序を
+適用します。既存 environment では直接 deploy script を使用できます。
+
+## Run the gated remote smoke
+
+smoke は **staging** 用の operator-only post-deploy proof です。disposable invited
+account を作成し、handle を claim し、project を register し、desktop authorization
+を完了し、machine credential を mint し、publication を prepare し、実際の presigned
+R2 `PUT` を実行してから verify と commit を行い、任意で served byte を取得します。
+`pnpm verify` や CI には含まれません。
+
+実行前に disposable email が staging の `SIGNUP_ALLOWED_EMAILS` にあり、handle、slug、
+（使用する場合は）public Worker name も disposable であることを確認します。password
+と Cloudflare API token は secure process environment から与え、shell history や
+file には書きません。cleanup token には staging target に限定した D1 edit と R2 object
+read/write permission が必要です。smoke に必要な non-secret setting は次のとおりです。
+
+```sh
+EZ_HOST_REMOTE_SMOKE=1
+EZ_HOST_REMOTE_SMOKE_ENVIRONMENT=staging
+EZ_HOST_REMOTE_SMOKE_CONTROL_URL=https://zudo-ez-host-control-staging.<account-subdomain>.workers.dev
+EZ_HOST_REMOTE_SMOKE_EMAIL=remote-smoke@example.test
+EZ_HOST_REMOTE_SMOKE_HANDLE=operator
+EZ_HOST_REMOTE_SMOKE_SLUG=smoke
+EZ_HOST_REMOTE_SMOKE_D1_DATABASE=zudo-ez-host-control-staging
+EZ_HOST_REMOTE_SMOKE_R2_BUCKET=zudo-ez-host-artifacts-staging
+```
+
+さらに `EZ_HOST_REMOTE_SMOKE_PASSWORD`、`CLOUDFLARE_ACCOUNT_ID`、
+`CLOUDFLARE_API_TOKEN` を process environment に設定します。public Worker がそこへ
+到達できる場合は、正確な
+`https://<slug>--<handle>.<public-base-domain>/` URL を
+`EZ_HOST_REMOTE_SMOKE_PUBLIC_URL` に設定します。省略すると serving は **SKIPPED** と
+報告され、目立つ notice が出ます。pass とは扱いません。`EZ_HOST_REMOTE_SMOKE=1` が
+real staging mutation の明示的 opt-in です。
+
+実行します。
+
+```sh
+pnpm smoke:remote
+```
+
+harness は各 step の verdict を表示し、configuration が成功した後は後続 step が失敗
+しても direct D1/R2 cleanup を常に試みます。password、cookie、machine credential、
+secret value、signed URL、raw Wrangler output は表示しません。2 つの remote smoke を
+同時実行しないでください。
+
+variable の完全な list、cleanup の削除順序、failure semantics は
+`docs/ops/environments.md` と `workers/control/src/storage/REMOTE_SMOKE.md` を参照して
+ください。
+
+## If a check fails
+
+environment invariant、preflight、dry run、migration、health check が失敗した場合は、
+live data を変更する前に停止します。表示された configuration または secret を修正し、
+失敗した check を再実行し、control の準備ができるまで public Worker を deploy しないで
+ください。green な local test や、smoke variable 未設定時の `SKIPPED, NOT RUN` message
+は remote deployment の証明ではありません。

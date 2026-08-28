@@ -1,3 +1,5 @@
+import type { OwnedProjectProjection } from "../db/queries.js";
+
 export interface OwnedProjectVisibility {
   readonly id: string;
   readonly slug: string;
@@ -7,23 +9,33 @@ export interface OwnedProjectVisibility {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly hostname: string | null;
+  readonly publicUrl: string | null;
   readonly generation: number;
   readonly machineNameSnapshot: string | null;
   readonly publishedAt: number | null;
 }
 
-interface OwnedProjectVisibilityRow {
-  readonly id: string;
-  readonly slug: string;
-  readonly displayName: string;
-  readonly description: string | null;
-  readonly status: "active" | "taken_down";
-  readonly createdAt: number;
-  readonly updatedAt: number;
-  readonly hostname: string | null;
-  readonly generation: number | null;
-  readonly machineNameSnapshot: string | null;
-  readonly publishedAt: number | null;
+type OwnedProjectVisibilityRow = OwnedProjectProjection;
+
+/** Map a database projection to the stable, public projects response shape. */
+export function toOwnedProjectVisibility(
+  row: OwnedProjectVisibilityRow,
+  publicContentDomain: string,
+): OwnedProjectVisibility {
+  return {
+    id: row.id,
+    slug: row.slug,
+    displayName: row.displayName,
+    description: row.description,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    hostname: row.hostname,
+    publicUrl: row.hostname === null ? null : `https://${row.hostname}.${publicContentDomain}/`,
+    generation: row.generation ?? 0,
+    machineNameSnapshot: row.machineNameSnapshot,
+    publishedAt: row.publishedAt,
+  };
 }
 
 /**
@@ -36,6 +48,7 @@ interface OwnedProjectVisibilityRow {
 export async function listOwnedProjects(
   database: D1Database,
   userId: string,
+  publicContentDomain: string,
 ): Promise<readonly OwnedProjectVisibility[]> {
   const result = await database
     .prepare(
@@ -61,19 +74,7 @@ export async function listOwnedProjects(
     .bind(userId)
     .all<OwnedProjectVisibilityRow>();
 
-  return result.results.map((row) => ({
-    id: row.id,
-    slug: row.slug,
-    displayName: row.displayName,
-    description: row.description,
-    status: row.status,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    hostname: row.hostname,
-    generation: row.generation ?? 0,
-    machineNameSnapshot: row.machineNameSnapshot,
-    publishedAt: row.publishedAt,
-  }));
+  return result.results.map((row) => toOwnedProjectVisibility(row, publicContentDomain));
 }
 
 /** Descriptive alias for callers that prefer the project noun first. */

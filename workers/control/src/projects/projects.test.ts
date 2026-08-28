@@ -27,6 +27,7 @@ import { resolveProjectByLabel } from "./resolution.js";
 const NOW = 1_700_000_000_000;
 const YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
 const BASE_URL = "https://control.test";
+const PUBLIC_CONTENT_DOMAIN = "public.test";
 
 beforeEach(async () => {
   await reset();
@@ -67,6 +68,7 @@ function sessionRuntimeEnv(email: string): ControlEnv & AuthRuntimeEnv {
     BETTER_AUTH_SECRET: `${crypto.randomUUID()}${crypto.randomUUID()}`,
     BETTER_AUTH_BASE_URL: BASE_URL,
     BETTER_AUTH_TRUSTED_ORIGINS: BASE_URL,
+    PUBLIC_CONTENT_DOMAIN,
     SIGNUP_ALLOWED_EMAILS: email,
   };
 }
@@ -334,7 +336,7 @@ describe("project visibility", () => {
     });
     await publishProject(published.project.id, owner.userId, machine.id);
 
-    await expect(listOwnedProjects(env.DB, owner.userId)).resolves.toEqual([
+    await expect(listOwnedProjects(env.DB, owner.userId, PUBLIC_CONTENT_DOMAIN)).resolves.toEqual([
       {
         id: published.project.id,
         slug: "published",
@@ -344,6 +346,7 @@ describe("project visibility", () => {
         createdAt: NOW,
         updatedAt: NOW,
         hostname: "published--visibility",
+        publicUrl: "https://published--visibility.public.test/",
         generation: 1,
         machineNameSnapshot: "Test Mac",
         publishedAt: NOW + 2,
@@ -357,6 +360,7 @@ describe("project visibility", () => {
         createdAt: NOW + 1,
         updatedAt: NOW + 1,
         hostname: "draft--visibility",
+        publicUrl: "https://draft--visibility.public.test/",
         generation: 0,
         machineNameSnapshot: null,
         publishedAt: null,
@@ -483,16 +487,42 @@ describe("project registration route", () => {
     );
     expect(response.status).toBe(200);
     const body = await response.json<{
-      projects: Array<{ id: string; hostname: string | null; generation: number }>;
+      projects: Array<{
+        id: string;
+        hostname: string | null;
+        publicUrl: string | null;
+        generation: number;
+        userId?: string;
+      }>;
     }>();
     expect(body.projects).toEqual([
       expect.objectContaining({
         id: own.project.id,
         hostname: "visible--listbrowser",
+        publicUrl: "https://visible--listbrowser.public.test/",
         generation: 0,
       }),
     ]);
+    expect(body.projects[0]).not.toHaveProperty("userId");
     expect(body.projects.some(({ id }) => id === otherProject.project.id)).toBe(false);
+
+    const detailResponse = await createControlApp().request(
+      `${BASE_URL}/api/projects/${own.project.id}`,
+      { headers: { cookie: browser.cookie } },
+      authEnv,
+    );
+    expect(detailResponse.status).toBe(200);
+    const detailBody = await detailResponse.json<{
+      project: {
+        id: string;
+        hostname: string | null;
+        publicUrl: string | null;
+        generation: number;
+        userId?: string;
+      };
+    }>();
+    expect(detailBody.project).toEqual(expect.objectContaining(body.projects[0]));
+    expect(detailBody.project).not.toHaveProperty("userId");
   });
 
   it("returns a stable conflict when the browser owner has not claimed a handle", async () => {

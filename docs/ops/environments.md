@@ -120,9 +120,103 @@ values. `.dev.vars` is ignored and must never be committed. The examples contain
 no credentials. Prefer the top-level Wrangler defaults unless local development
 is specifically exercising the signer or authentication configuration.
 
+## Gated remote smoke
+
+`pnpm smoke:remote` is an operator-only, post-deploy proof for staging. It is
+deliberately absent from `pnpm verify`, `scripts/run-b4push.sh`, and CI. With
+`EZ_HOST_REMOTE_SMOKE` unset it exits successfully only after printing
+`SKIPPED, NOT RUN`; that result is not evidence that staging works.
+
+Run it only against a disposable invited email on an otherwise idle staging
+environment. The email must be present in staging's `SIGNUP_ALLOWED_EMAILS`,
+and the configured handle and slug must also be disposable. The harness refuses
+production before its first request.
+
+| Name                               | Purpose                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `EZ_HOST_REMOTE_SMOKE=1`           | Explicitly opts into real staging mutations.                                                       |
+| `EZ_HOST_REMOTE_SMOKE_ENVIRONMENT` | Must be exactly `staging`; every other value fails closed.                                         |
+| `EZ_HOST_REMOTE_SMOKE_CONTROL_URL` | Deployed control Worker HTTPS origin whose hostname names staging; no path, query, or credentials. |
+| `EZ_HOST_REMOTE_SMOKE_EMAIL`       | Dedicated allowlisted email; teardown uses it as the recovery identity.                            |
+| `EZ_HOST_REMOTE_SMOKE_PASSWORD`    | Disposable signup password. It is never printed or written to disk.                                |
+| `EZ_HOST_REMOTE_SMOKE_HANDLE`      | Dedicated handle to claim.                                                                         |
+| `EZ_HOST_REMOTE_SMOKE_SLUG`        | Dedicated project slug to register.                                                                |
+| `EZ_HOST_REMOTE_SMOKE_D1_DATABASE` | Must be `zudo-ez-host-control-staging`; used by direct operator cleanup.                           |
+| `EZ_HOST_REMOTE_SMOKE_R2_BUCKET`   | Must be `zudo-ez-host-artifacts-staging`; used by direct operator cleanup.                         |
+| `CLOUDFLARE_ACCOUNT_ID`            | Account containing the named staging resources.                                                    |
+| `CLOUDFLARE_API_TOKEN`             | Operator token with D1 edit and R2 object read/write permissions for only the staging targets.     |
+
+`EZ_HOST_REMOTE_SMOKE_PUBLIC_URL` is optional. Set it to the exact project URL
+only when the public Worker is reachable for the configured
+`<slug>--<handle>` label, either because that is the workers.dev Worker name or
+because a wildcard custom domain is attached. The harness rejects a URL whose
+first hostname label does not equal `<slug>--<handle>`. When it is absent,
+serving is reported as `SKIPPED` in both the step table and a separate prominent
+notice; it never reads as passed.
+
+Example invocation (supply the password, API token, and account ID through the
+operator's environment, not shell history or a committed file):
+
+```sh
+EZ_HOST_REMOTE_SMOKE=1 \
+EZ_HOST_REMOTE_SMOKE_ENVIRONMENT=staging \
+EZ_HOST_REMOTE_SMOKE_CONTROL_URL=https://control-staging.example.test \
+EZ_HOST_REMOTE_SMOKE_EMAIL=remote-smoke@example.test \
+EZ_HOST_REMOTE_SMOKE_HANDLE=operator \
+EZ_HOST_REMOTE_SMOKE_SLUG=smoke \
+EZ_HOST_REMOTE_SMOKE_D1_DATABASE=zudo-ez-host-control-staging \
+EZ_HOST_REMOTE_SMOKE_R2_BUCKET=zudo-ez-host-artifacts-staging \
+pnpm smoke:remote
+```
+
+The run creates fresh HTML containing a cryptographic nonce, hashes it, and
+requires prepare to return at least one upload contract. The upload step then
+uses that contract for a real presigned `PUT` with the returned `Content-Type`
+and `Content-MD5` plus `If-None-Match: *`. A missing or unused contract is a
+failure. Signed URLs, cookies, passwords, machine credentials, secret values,
+and raw Wrangler output are never emitted.
+
+Before the first HTTP write, the configuration step queries staging D1 and
+requires the disposable email to be absent. An existing account, an unreadable
+preflight result, or a production-shaped URL/resource name fails without
+running cleanup, so a configuration typo cannot delete established state.
+
+### Always-run cleanup
+
+Cleanup runs after success and failure and has its own passed/failed result. It
+uses Wrangler's direct remote D1/R2 operator path because the application APIs
+cannot delete projects, accounts, immutable publications, or all stored
+objects. Do not run two remote smokes concurrently: cleanup also removes the
+staging signup rate-limit row touched during this run's time window.
+
+The concrete deletion order is:
+
+1. Query D1 by the disposable email for staged, content, and promoted artifact
+   keys. Merge those with the in-process checkpoints so cleanup also covers a
+   response lost after a successful server-side mutation.
+2. Delete every discovered/checkpointed R2 key in reverse creation order:
+   promoted artifact manifest, content object(s), then staged manifest.
+3. In one D1 remote file batch, temporarily drop only the three immutable-delete
+   triggers, then delete project heads, publication objects, publications,
+   attempt objects, verified inventory, attempts, hostname allocations,
+   projects, desktop codes, machines, sessions, accounts, verification rows,
+   the user, and the run's signup rate-limit row.
+4. Recreate the three triggers in that same batch. Do not add explicit
+   `BEGIN`/`COMMIT`; D1 file imports provide the batch boundary and reject
+   nested transaction statements.
+5. Query D1 separately and report cleanup passed only when the disposable email
+   is absent. A command error, unreadable count, or remaining row reports
+   cleanup failed (`operator_cleanup_unproven`) even if the lifecycle passed.
+
+The cleanup commands explicitly use `--remote --env staging`. They require the
+account ID/API token above; the deployed Worker's R2 signing keys are not used
+by teardown.
+
 ## Cloudflare references
 
 - [Wrangler environments](https://developers.cloudflare.com/workers/wrangler/environments/)
 - [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)
 - [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)
 - [Workers routes and domains](https://developers.cloudflare.com/workers/configuration/routing/)
+- [Wrangler D1 execute](https://developers.cloudflare.com/d1/get-started/)
+- [Wrangler R2 object commands](https://developers.cloudflare.com/workers/wrangler/commands/r2/)

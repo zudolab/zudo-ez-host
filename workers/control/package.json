@@ -7,6 +7,9 @@
     "build": "node ../../scripts/check-environment-config.mjs && wrangler types src/worker-configuration.d.ts --env-interface ControlEnv --include-runtime false --strict-vars false --check && wrangler deploy --dry-run --config wrangler.toml --env=",
     "build:test-auxiliary": "wrangler deploy src/test-auxiliary.ts --dry-run --config wrangler.toml --env= --outdir .vitest/control",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply zudo-ez-host-control-local --local",
+    "db:migrate:staging": "wrangler d1 migrations apply zudo-ez-host-control-staging --remote --env staging",
+    "db:migrate:production": "wrangler d1 migrations apply zudo-ez-host-control-production --remote --env production",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit"
   },

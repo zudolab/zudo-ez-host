@@ -57,6 +57,30 @@ pnpm --dir workers/public exec wrangler deploy --dry-run --env staging
 Repeat the dry runs with `--env production`. Actual deploys remain
 operator-invoked and are outside the repository verification gate.
 
+## D1 migrations
+
+Apply the control Worker migrations before deploying that Worker in each
+environment. From the repository root, run the local command for local
+development, or the named remote command after the corresponding D1 database
+has been provisioned. Run one target at a time with an authenticated Wrangler
+session:
+
+```sh
+# Local development
+pnpm --dir workers/control db:migrate:local
+
+# Staging, after provisioning and before the staging Worker deploy
+pnpm --dir workers/control db:migrate:staging
+
+# Production, after staging validation and before the production Worker deploy
+pnpm --dir workers/control db:migrate:production
+```
+
+The staging and production scripts explicitly pass both `--remote` and
+`--env staging` or `--env production`, so they cannot silently apply against
+the top-level local D1 fixture. Confirm each migration completes successfully
+before running the matching Worker deploy command.
+
 ## Control Worker requirements
 
 | Name                          | Kind   | Environments        | Purpose                                                                                                     |

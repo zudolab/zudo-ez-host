@@ -10,6 +10,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 BETTER_AUTH_BASE_URL = "https://control.test"
 BETTER_AUTH_TRUSTED_ORIGINS = "https://control.test"
+PUBLIC_CONTENT_DOMAIN = "public.test"
 
 [[d1_databases]]
 binding = "DB"
@@ -37,6 +38,7 @@ BETTER_AUTH_BASE_URL = "https://zudo-ez-host-control-staging.YOUR_WORKERS_SUBDOM
 BETTER_AUTH_TRUSTED_ORIGINS = "https://zudo-ez-host-control-staging.YOUR_WORKERS_SUBDOMAIN.workers.dev"
 CONTROL_BASE_DOMAIN = "zudo-ez-host-control-staging.YOUR_WORKERS_SUBDOMAIN.workers.dev"
 PUBLIC_BASE_DOMAIN = "YOUR_WORKERS_SUBDOMAIN.workers.dev"
+PUBLIC_CONTENT_DOMAIN = "YOUR_WORKERS_SUBDOMAIN.workers.dev"
 R2_ACCOUNT_ID = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 R2_BUCKET_NAME = "zudo-ez-host-artifacts-staging"
 
@@ -65,6 +67,7 @@ BETTER_AUTH_BASE_URL = "https://control.YOUR_CONTROL_DOMAIN"
 BETTER_AUTH_TRUSTED_ORIGINS = "https://control.YOUR_CONTROL_DOMAIN"
 CONTROL_BASE_DOMAIN = "control.YOUR_CONTROL_DOMAIN"
 PUBLIC_BASE_DOMAIN = "YOUR_PUBLIC_DOMAIN"
+PUBLIC_CONTENT_DOMAIN = "YOUR_PUBLIC_DOMAIN"
 R2_ACCOUNT_ID = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 R2_BUCKET_NAME = "zudo-ez-host-artifacts-production"
 

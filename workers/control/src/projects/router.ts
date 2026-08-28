@@ -12,7 +12,7 @@ import {
 import { createControlDatabase } from "../db/database.js";
 import { getOwnedProject } from "../db/queries.js";
 import { readBoundedJsonRequest, RequestBodyError } from "../http/request-body.js";
-import { listOwnedProjects } from "./queries.js";
+import { listOwnedProjects, toOwnedProjectVisibility } from "./queries.js";
 import {
   ProjectRegistrationError,
   registerProject,
@@ -93,7 +93,11 @@ router.get("/", exactControlCorsMiddleware, async (context) => {
   if (session === null) {
     return context.json({ error: "session_authentication_required" }, 401, NO_STORE_HEADERS);
   }
-  const projects = await listOwnedProjects(context.env.DB, session.userId);
+  const projects = await listOwnedProjects(
+    context.env.DB,
+    session.userId,
+    context.env.PUBLIC_CONTENT_DOMAIN,
+  );
   return context.json({ projects }, 200, NO_STORE_HEADERS);
 });
 
@@ -158,7 +162,11 @@ router.get("/:projectId", exactControlCorsMiddleware, projectAuthMiddleware, asy
   if (project === undefined) {
     return context.json({ error: "project_not_found" }, 404, NO_STORE_HEADERS);
   }
-  return context.json({ project }, 200, NO_STORE_HEADERS);
+  return context.json(
+    { project: toOwnedProjectVisibility(project, context.env.PUBLIC_CONTENT_DOMAIN) },
+    200,
+    NO_STORE_HEADERS,
+  );
 });
 
 export const projectsRouter = router;

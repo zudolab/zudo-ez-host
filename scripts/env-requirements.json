@@ -27,6 +27,12 @@
         "purpose": "Base hostname used to construct and validate published-site hosts."
       },
       {
+        "name": "PUBLIC_CONTENT_DOMAIN",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "Public-content hostname suffix used to construct canonical project URLs."
+      },
+      {
         "name": "R2_ACCOUNT_ID",
         "kind": "var",
         "environments": ["staging", "production"],

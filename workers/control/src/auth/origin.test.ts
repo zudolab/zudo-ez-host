@@ -18,6 +18,7 @@ function runtimeEnv(): ControlEnv & AuthRuntimeEnv {
     BETTER_AUTH_SECRET: `${crypto.randomUUID()}${crypto.randomUUID()}`,
     BETTER_AUTH_BASE_URL: BASE_URL,
     BETTER_AUTH_TRUSTED_ORIGINS: BASE_URL,
+    PUBLIC_CONTENT_DOMAIN: "public.test",
     SIGNUP_ALLOWED_EMAILS: EMAIL,
   };
 }

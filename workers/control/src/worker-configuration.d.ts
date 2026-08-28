@@ -47,7 +47,11 @@ declare namespace Cloudflare {
     R2_ACCESS_KEY_ID: string;
     R2_SECRET_ACCESS_KEY: string;
   }
-  interface Env extends __BaseEnv_ControlEnv {}
+  // cloudflare:test selects the top-level fixture, where this test-only
+  // self-binding is guaranteed. Named deploy environment interfaces omit it.
+  interface Env extends __BaseEnv_ControlEnv {
+    PUBLICATION_RESOLVER: Service<typeof import("./index").PublicationResolver>;
+  }
 }
 interface ControlEnv extends __BaseEnv_ControlEnv {}
 type StringifyValues<EnvType extends Record<string, unknown>> = {

@@ -66,6 +66,12 @@ function binding(config, section, bindingName) {
   return value;
 }
 
+function onlyEntry(config, section) {
+  const entries = config.arraySections.get(section);
+  assert.equal(entries?.length, 1, `expected exactly one [[${section}]] entry`);
+  return entries[0];
+}
+
 const [controlSource, publicSource, manifestSource] = await Promise.all([
   readFile(path.join(root, "workers/control/wrangler.toml"), "utf8"),
   readFile(path.join(root, "workers/public/wrangler.toml"), "utf8"),
@@ -128,6 +134,27 @@ for (const environment of environments) {
   );
   assert.equal(scalar(control, `${prefix}.observability`, "enabled"), true);
   assert.equal(scalar(publicWorker, `${prefix}.observability`, "enabled"), true);
+
+  if (environment === "production") {
+    const controlRoute = onlyEntry(control, `${prefix}.routes`);
+    assert.equal(
+      controlRoute.pattern,
+      controlBaseDomain,
+      "production: control route and base domain diverged",
+    );
+    assert.equal(controlRoute.custom_domain, true, "production: control route must be a domain");
+    const publicRoute = onlyEntry(publicWorker, `${prefix}.routes`);
+    assert.equal(
+      publicRoute.pattern,
+      `*.${publicBaseDomain}/*`,
+      "production: public wildcard route and base domain diverged",
+    );
+    assert.equal(
+      publicRoute.zone_name,
+      publicBaseDomain,
+      "production: public route zone and base domain diverged",
+    );
+  }
 }
 
 for (const [worker, config] of [

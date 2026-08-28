@@ -49,6 +49,10 @@ name = "zudo-ez-host-public"
 [env.production.vars]
 PUBLIC_BASE_DOMAIN = "YOUR_PUBLIC_DOMAIN"
 
+[[env.production.routes]]
+pattern = "*.YOUR_PUBLIC_DOMAIN/*"
+zone_name = "YOUR_PUBLIC_DOMAIN"
+
 [[env.production.r2_buckets]]
 binding = "ARTIFACTS"
 bucket_name = "zudo-ez-host-artifacts-production"

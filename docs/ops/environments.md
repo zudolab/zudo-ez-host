@@ -31,9 +31,11 @@ steps once per environment:
    differs. `PUBLIC_BASE_DOMAIN` is the account's
    `<subdomain>.workers.dev`, without that project label.
 5. Production needs a separate registrable public-content domain with a wildcard
-   DNS/Worker route and a control-plane domain. Domain and route provisioning is
-   the operator checkpoint; never silently treat the conventional production
-   Worker name on `workers.dev` as a valid tenant hostname.
+   DNS/Worker route and a control-plane domain. The committed production route
+   descriptors become active after the domain placeholders are replaced; create
+   the required zone/DNS state before deploying them. Never silently treat the
+   conventional production Worker name on `workers.dev` as a valid tenant
+   hostname.
 6. Create a bucket-scoped R2 API token, then use interactive Wrangler prompts to
    set each secret below, for example:
 

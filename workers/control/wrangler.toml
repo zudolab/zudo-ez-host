@@ -71,6 +71,10 @@ R2_BUCKET_NAME = "zudo-ez-host-artifacts-production"
 [env.production.secrets]
 required = ["BETTER_AUTH_SECRET", "SIGNUP_ALLOWED_EMAILS", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]
 
+[[env.production.routes]]
+pattern = "control.YOUR_CONTROL_DOMAIN"
+custom_domain = true
+
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "zudo-ez-host-control-production"

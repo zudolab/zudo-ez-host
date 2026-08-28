@@ -1,0 +1,11 @@
+# Copy to .dev.vars and replace every placeholder. Never commit .dev.vars.
+BETTER_AUTH_BASE_URL=https://control.test
+BETTER_AUTH_TRUSTED_ORIGINS=https://control.test
+CONTROL_BASE_DOMAIN=control.test
+PUBLIC_BASE_DOMAIN=public.test
+R2_ACCOUNT_ID=YOUR_CLOUDFLARE_ACCOUNT_ID
+R2_BUCKET_NAME=zudo-ez-host-artifacts-local
+BETTER_AUTH_SECRET=GENERATE_AT_LEAST_32_RANDOM_CHARACTERS
+SIGNUP_ALLOWED_EMAILS=operator@example.test
+R2_ACCESS_KEY_ID=YOUR_R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY=YOUR_R2_SECRET_ACCESS_KEY

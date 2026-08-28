@@ -1,5 +1,5 @@
-# Local development and workerd tests only. Production deployment configuration
-# will be introduced separately with explicit account resources and routes.
+# Local development and workerd tests only. Named environments below are the
+# deploy descriptors; keep this top-level fixture stable for the workerd lanes.
 name = "zudo-ez-host-public-local"
 main = "src/index.ts"
 compatibility_date = "2026-08-27"
@@ -22,3 +22,45 @@ bucket_name = "zudo-ez-host-artifacts-local"
 binding = "CONTROL"
 service = "zudo-ez-host-control-local"
 entrypoint = "PublicationResolver"
+
+[env.staging]
+# This must match the smoke project's <slug>--<handle> label so its workers.dev
+# hostname satisfies parsePublicHost. Provisioning may replace this value.
+name = "smoke--operator"
+
+[env.staging.vars]
+PUBLIC_BASE_DOMAIN = "YOUR_WORKERS_SUBDOMAIN.workers.dev"
+
+[[env.staging.r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "zudo-ez-host-artifacts-staging"
+
+[[env.staging.services]]
+binding = "CONTROL"
+service = "zudo-ez-host-control-staging"
+entrypoint = "PublicationResolver"
+
+[env.staging.observability]
+enabled = true
+
+[env.production]
+name = "zudo-ez-host-public"
+
+[env.production.vars]
+PUBLIC_BASE_DOMAIN = "YOUR_PUBLIC_DOMAIN"
+
+[[env.production.routes]]
+pattern = "*.YOUR_PUBLIC_DOMAIN/*"
+zone_name = "YOUR_PUBLIC_DOMAIN"
+
+[[env.production.r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "zudo-ez-host-artifacts-production"
+
+[[env.production.services]]
+binding = "CONTROL"
+service = "zudo-ez-host-control"
+entrypoint = "PublicationResolver"
+
+[env.production.observability]
+enabled = true

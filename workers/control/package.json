@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "wrangler types src/worker-configuration.d.ts --env-interface ControlEnv --include-runtime false --check && wrangler deploy --dry-run --config wrangler.toml",
-    "build:test-auxiliary": "wrangler deploy src/test-auxiliary.ts --dry-run --config wrangler.toml --outdir .vitest/control",
+    "build": "node ../../scripts/check-environment-config.mjs && wrangler types src/worker-configuration.d.ts --env-interface ControlEnv --include-runtime false --strict-vars false --check && wrangler deploy --dry-run --config wrangler.toml --env=",
+    "build:test-auxiliary": "wrangler deploy src/test-auxiliary.ts --dry-run --config wrangler.toml --env= --outdir .vitest/control",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit"

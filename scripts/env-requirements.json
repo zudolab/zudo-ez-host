@@ -1,0 +1,75 @@
+{
+  "$schemaVersion": 1,
+  "workers": {
+    "control": [
+      {
+        "name": "BETTER_AUTH_BASE_URL",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "Canonical HTTPS origin used by Better Auth."
+      },
+      {
+        "name": "BETTER_AUTH_TRUSTED_ORIGINS",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "Comma-separated exact origins allowed to make credentialed control-plane requests."
+      },
+      {
+        "name": "CONTROL_BASE_DOMAIN",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "Hostname of the control Worker, without a scheme or path."
+      },
+      {
+        "name": "PUBLIC_BASE_DOMAIN",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "Base hostname used to construct and validate published-site hosts."
+      },
+      {
+        "name": "R2_ACCOUNT_ID",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "Cloudflare account identifier used by the R2 S3 signing endpoint."
+      },
+      {
+        "name": "R2_BUCKET_NAME",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "R2 bucket name embedded in presigned upload URLs."
+      },
+      {
+        "name": "BETTER_AUTH_SECRET",
+        "kind": "secret",
+        "environments": ["staging", "production"],
+        "purpose": "High-entropy key used by Better Auth to protect sessions and tokens."
+      },
+      {
+        "name": "SIGNUP_ALLOWED_EMAILS",
+        "kind": "secret",
+        "environments": ["staging", "production"],
+        "purpose": "Private comma-separated allowlist of accounts permitted to sign up."
+      },
+      {
+        "name": "R2_ACCESS_KEY_ID",
+        "kind": "secret",
+        "environments": ["staging", "production"],
+        "purpose": "Access key for the bucket-scoped R2 API token used to sign uploads."
+      },
+      {
+        "name": "R2_SECRET_ACCESS_KEY",
+        "kind": "secret",
+        "environments": ["staging", "production"],
+        "purpose": "Secret key for the bucket-scoped R2 API token used to sign uploads."
+      }
+    ],
+    "public": [
+      {
+        "name": "PUBLIC_BASE_DOMAIN",
+        "kind": "var",
+        "environments": ["staging", "production"],
+        "purpose": "Base hostname against which incoming published-site hosts are validated."
+      }
+    ]
+  }
+}

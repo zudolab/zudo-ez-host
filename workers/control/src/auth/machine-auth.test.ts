@@ -98,7 +98,7 @@ describe("machine publish authentication", () => {
     );
 
     const healthResponse = await app.fetch(new Request("https://control.test/health"), env);
-    expect(healthResponse.status).toBe(200);
+    expect(healthResponse.status).toBe(503);
   });
 
   it("accepts a valid token and derives every identity field from D1", async () => {

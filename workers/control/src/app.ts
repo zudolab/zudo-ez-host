@@ -27,11 +27,12 @@ import {
   createPublicationPrepareRouter,
   type PublicationPrepareRouterOptions,
 } from "./publication/prepare/index.js";
-import { healthRouter } from "./routes/health.js";
+import { createHealthRouter, type HealthRouterOptions } from "./routes/health.js";
 
 export interface ControlAppOptions {
   readonly prepare?: PublicationPrepareRouterOptions;
   readonly contracts?: PublicationContractsRouterOptions;
+  readonly health?: HealthRouterOptions;
 }
 
 interface ControlAppEnv {
@@ -53,7 +54,7 @@ export function createControlApp(options: ControlAppOptions = {}): Hono<ControlA
   const publicationPrepareRouter = createPublicationPrepareRouter(options.prepare);
   const publicationContractsRouter = createPublicationContractsRouter(options.contracts);
 
-  app.route("/", healthRouter);
+  app.route("/", createHealthRouter(options.health));
   app.use("/login", exactControlCorsMiddleware);
   app.use("/login", requireTrustedOriginMiddleware);
   app.get("/login", (context) => loginPageResponse(safeReturnTo(context.req.query("returnTo"))));

@@ -2,7 +2,10 @@ import {
   MAX_CANONICAL_MANIFEST_BYTES,
   MANIFEST_SCHEMA_VERSION,
   SERVING_SEMANTICS_VERSION,
+  artifactManifestKey,
   encodeCanonical,
+  contentKey,
+  createReadOnlyR2Facade,
   generateMachineToken,
   hashMachineToken,
   MACHINE_TOKEN_PREFIX,
@@ -10,18 +13,17 @@ import {
   type Manifest,
   type ManifestEntry,
   type PublicationResolution,
+  type ReadOnlyR2Bucket,
 } from "@zudo-ez-host/core";
 import { env, exports } from "cloudflare:workers";
 import { applyD1Migrations, reset } from "cloudflare:test";
 import { describe, expect, inject, it, vi, beforeEach } from "vitest";
 
-import { artifactManifestKey, contentKey } from "../../control/src/storage/keys.js";
+// These test-only fixtures intentionally come from control: the topology
+// tests seed and drive the real control D1 service. Public production modules
+// do not import control source.
 import { createControlDatabase } from "../../control/src/db/database.js";
 import { seedMachine, seedUser } from "../../control/src/db/seeds.js";
-import {
-  createReadOnlyR2Facade,
-  type ReadOnlyR2Bucket,
-} from "../../control/src/storage/readonly.js";
 import {
   cacheControlFor,
   createArtifactCacheKey,

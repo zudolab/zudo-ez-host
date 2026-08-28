@@ -4,9 +4,9 @@ export {
   immutableContentKey,
   promotedArtifactManifestKey,
   stagedManifestKey,
-} from "./keys.js";
-export type { ReadOnlyR2Bucket, R2Reader } from "./readonly.js";
-export { createReadOnlyR2Bucket, createReadOnlyR2Facade } from "./readonly.js";
+} from "@zudo-ez-host/core";
+export type { ReadOnlyR2Bucket, R2Reader } from "@zudo-ez-host/core";
+export { createReadOnlyR2Bucket, createReadOnlyR2Facade } from "@zudo-ez-host/core";
 export {
   Aws4FetchUploadUrlSigner,
   UPLOAD_URL_EXPIRY_SECONDS,

@@ -1,6 +1,7 @@
 import {
   MANIFEST_SCHEMA_VERSION,
   SERVING_SEMANTICS_VERSION,
+  contentKey,
   encodeCanonical,
   parseMachineToken,
   type ManifestEntry,
@@ -8,8 +9,6 @@ import {
 import { env, exports } from "cloudflare:workers";
 import { applyD1Migrations, reset } from "cloudflare:test";
 import { beforeEach, describe, expect, inject, it } from "vitest";
-
-import { contentKey } from "../../control/src/storage/keys.js";
 
 const CONTROL_ORIGIN = "https://control.test";
 const PUBLIC_BASE_DOMAIN = "public.test";

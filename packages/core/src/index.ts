@@ -55,3 +55,5 @@ export type {
 export * from "./serving/index.js";
 export * from "./machine-token/index.js";
 export type { PublicationResolution, PublicationServingFlags } from "./resolution/index.js";
+export * from "./storage/keys.js";
+export * from "./storage/readonly.js";

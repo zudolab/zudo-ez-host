@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "wrangler dev --config wrangler.toml",
     "build": "node ../../scripts/check-environment-config.mjs && wrangler types src/worker-configuration.d.ts --env-interface ControlEnv --include-runtime false --strict-vars false --check && wrangler deploy --dry-run --config wrangler.toml --env=",
     "build:test-auxiliary": "wrangler deploy src/test-auxiliary.ts --dry-run --config wrangler.toml --env= --outdir .vitest/control",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "wrangler dev --config wrangler.toml",
     "build": "node ../../scripts/check-environment-config.mjs && wrangler types src/worker-configuration.d.ts --env-interface PublicEnv --include-runtime false --strict-vars false --check && wrangler deploy --dry-run --config wrangler.toml --env=",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit"

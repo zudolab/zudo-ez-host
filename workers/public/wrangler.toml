@@ -29,7 +29,7 @@ entrypoint = "PublicationResolver"
 name = "smoke--operator"
 
 [env.staging.vars]
-PUBLIC_BASE_DOMAIN = "YOUR_WORKERS_SUBDOMAIN.workers.dev"
+PUBLIC_BASE_DOMAIN = "takazudo.workers.dev"
 
 [[env.staging.r2_buckets]]
 binding = "ARTIFACTS"

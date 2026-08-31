@@ -34,12 +34,12 @@ name = "zudo-ez-host-control-staging"
 services = [] # Explicitly empty: the top-level self-binding is test-only.
 
 [env.staging.vars]
-BETTER_AUTH_BASE_URL = "https://zudo-ez-host-control-staging.YOUR_WORKERS_SUBDOMAIN.workers.dev"
-BETTER_AUTH_TRUSTED_ORIGINS = "https://zudo-ez-host-control-staging.YOUR_WORKERS_SUBDOMAIN.workers.dev"
-CONTROL_BASE_DOMAIN = "zudo-ez-host-control-staging.YOUR_WORKERS_SUBDOMAIN.workers.dev"
-PUBLIC_BASE_DOMAIN = "YOUR_WORKERS_SUBDOMAIN.workers.dev"
-PUBLIC_CONTENT_DOMAIN = "YOUR_WORKERS_SUBDOMAIN.workers.dev"
-R2_ACCOUNT_ID = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+BETTER_AUTH_BASE_URL = "https://zudo-ez-host-control-staging.takazudo.workers.dev"
+BETTER_AUTH_TRUSTED_ORIGINS = "https://zudo-ez-host-control-staging.takazudo.workers.dev"
+CONTROL_BASE_DOMAIN = "zudo-ez-host-control-staging.takazudo.workers.dev"
+PUBLIC_BASE_DOMAIN = "takazudo.workers.dev"
+PUBLIC_CONTENT_DOMAIN = "takazudo.workers.dev"
+R2_ACCOUNT_ID = "367c7f51801e1f537030f93d5a5e6008"
 R2_BUCKET_NAME = "zudo-ez-host-artifacts-staging"
 
 [env.staging.secrets]
@@ -48,7 +48,7 @@ required = ["BETTER_AUTH_SECRET", "SIGNUP_ALLOWED_EMAILS", "R2_ACCESS_KEY_ID", "
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "zudo-ez-host-control-staging"
-database_id = "00000000-0000-0000-0000-000000000000" # Filled during provisioning; see docs/ops/environments.md.
+database_id = "20b0adfe-7554-4df0-ae61-81f464c42e37"
 migrations_dir = "migrations"
 
 [[env.staging.r2_buckets]]

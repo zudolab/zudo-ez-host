@@ -12,11 +12,12 @@ Invited email/password accounts, canonical handles, named-machine enrollment,
 and machine-scoped publication authorization have landed. A documented,
 operator-invoked deploy path now exists for staging and production, including
 resource provisioning, migrations, configuration preflight,
-control-before-public deployment, and gated remote smoke. No real Cloudflare
-deployment has been performed yet; deployment still requires an authenticated
-operator, and production domains, resources, routes, and secrets remain
-prerequisites. The bilingual documentation site is scaffolded under
-[`doc/`](doc/).
+control-before-public deployment, and gated remote smoke. Staging is now
+deployed on real Cloudflare D1, R2, and Workers infrastructure; its end-to-end
+smoke passed with a genuine presigned R2 upload, publication commit, served-byte
+assertion, and direct cleanup. Production domains, resources, routes, and
+secrets remain prerequisites. The bilingual documentation site is scaffolded
+under [`doc/`](doc/).
 
 ## Tech stack
 

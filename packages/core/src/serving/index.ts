@@ -115,7 +115,7 @@ export interface MethodNotAllowedDecision extends ServingDecisionMetadata {
 
 export interface RejectedPathDecision extends ServingDecisionMetadata {
   readonly kind: "rejected";
-  readonly status: 400;
+  readonly status: 404;
   readonly reason: ServingPathRejectionReason;
 }
 
@@ -355,7 +355,7 @@ function rejectedPathDecision(
 ): RejectedPathDecision {
   return {
     kind: "rejected",
-    status: 400,
+    status: 404,
     reason,
     ...metadata(flags, headersWithNosniff(), "noStore"),
   };

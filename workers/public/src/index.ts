@@ -1,21 +1,19 @@
 import type {
   ManifestEntryLookup,
   PublicationResolution,
+  ReadOnlyR2Bucket,
   ServingDecision,
 } from "@zudo-ez-host/core";
 import {
   MAX_CANONICAL_MANIFEST_BYTES,
+  artifactManifestKey,
   createManifestLookup,
+  createReadOnlyR2Facade,
   decodeManifest,
   parseLabel,
   resolveServing,
+  contentKey,
 } from "@zudo-ez-host/core";
-
-import { artifactManifestKey, contentKey } from "../../control/src/storage/keys.js";
-import {
-  createReadOnlyR2Facade,
-  type ReadOnlyR2Bucket,
-} from "../../control/src/storage/readonly.js";
 
 /** The narrow RPC surface consumed by the public responder. */
 export interface PublicationResolverBinding {
@@ -28,6 +26,7 @@ export interface PublicHandlerDependencies {
   readonly resolver: PublicationResolverBinding;
   readonly artifacts: ReadOnlyR2Bucket;
   readonly cache?: Pick<Cache, "match" | "put">;
+  readonly logDiagnostic?: (diagnostic: PublicServingDiagnostic) => void;
 }
 
 /** A handler returned by {@link createPublicHandler}. */
@@ -41,6 +40,53 @@ const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable" as const;
 const REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate" as const;
 const NO_STORE_CACHE_CONTROL = "no-store" as const;
 type HttpServingDecision = Extract<ServingDecision, { status: number }>;
+
+export type PublicServingFailureCause =
+  | "publication_resolver_error"
+  | "publication_resolution_invalid"
+  | "gate_verification_unavailable"
+  | "manifest_read_error"
+  | "manifest_missing"
+  | "manifest_oversized"
+  | "manifest_body_read_error"
+  | "manifest_invalid"
+  | "manifest_unsafe_content_type"
+  | "path_rejected"
+  | "path_not_found"
+  | "content_metadata_read_error"
+  | "content_read_error"
+  | "content_missing"
+  | "serving_resolution_error";
+
+/** Structured, server-side-only failure detail for the public serving path. */
+export interface PublicServingDiagnostic {
+  readonly event: "public_serving_failure";
+  readonly cause: PublicServingFailureCause;
+  readonly pathRejectionReason?: Extract<ServingDecision, { kind: "rejected" }>["reason"];
+}
+
+function emitDiagnostic(
+  dependencies: PublicHandlerDependencies,
+  cause: PublicServingFailureCause,
+  pathRejectionReason?: PublicServingDiagnostic["pathRejectionReason"],
+): void {
+  const diagnostic: PublicServingDiagnostic = {
+    event: "public_serving_failure",
+    cause,
+    ...(pathRejectionReason === undefined ? {} : { pathRejectionReason }),
+  };
+
+  try {
+    if (dependencies.logDiagnostic === undefined) {
+      // eslint-disable-next-line no-console -- Workers Logs indexes structured object fields.
+      console.error(diagnostic);
+    } else {
+      dependencies.logDiagnostic(diagnostic);
+    }
+  } catch {
+    // Diagnostics must never alter the intentionally uniform public response.
+  }
+}
 
 function defaultCache(): Pick<Cache, "match" | "put"> {
   return (globalThis.caches as CacheStorage & { default: Cache }).default;
@@ -145,6 +191,16 @@ function hostForRequest(request: Request, url: URL): string | undefined {
   return request.headers.has("Host") ? (request.headers.get("Host") ?? undefined) : url.host;
 }
 
+function rawPathForRequest(request: Request, url: URL): string {
+  // Read the request target from the serialized URL instead of round-tripping
+  // URL.pathname, whose parser removes encoded dot segments. The URL object is
+  // still authoritative for the already-validated origin and host.
+  const rawTarget = request.url.startsWith(url.origin)
+    ? request.url.slice(url.origin.length)
+    : `${url.pathname}${url.search}`;
+  return rawTarget.length === 0 ? "/" : rawTarget;
+}
+
 function isHtmlNavigation(request: Request): boolean {
   const fetchMode = request.headers.get("Sec-Fetch-Mode");
   if (fetchMode?.toLowerCase() === "navigate") {
@@ -204,13 +260,19 @@ export function createArtifactCacheKey(
   return new Request(`${PUBLIC_CACHE_ORIGIN}/${key}`, { method: "GET" });
 }
 
-function responseHeaders(decision: HttpServingDecision, artifactHash?: string): Headers {
+function responseHeaders(
+  decision: HttpServingDecision,
+  artifactHash?: string,
+  contentLength?: number,
+): Headers {
   const headers = new Headers(decision.headers);
   headers.set("Cache-Control", cacheControlFor(decision));
 
   if (decision.kind === "serve" && artifactHash !== undefined) {
     headers.set("ETag", createArtifactEtag(artifactHash, decision.path));
-    headers.set("Content-Length", String(decision.entry.size));
+    if (contentLength !== undefined) {
+      headers.set("Content-Length", String(contentLength));
+    }
   }
 
   return headers;
@@ -228,52 +290,71 @@ function responseForDecision(
   decision: HttpServingDecision,
   body: ReadableStream | null,
   artifactHash?: string,
+  contentLength?: number,
 ): Response {
   return new Response(request.method === "HEAD" ? null : body, {
     status: decision.status,
-    headers: responseHeaders(decision, artifactHash),
+    headers: responseHeaders(decision, artifactHash, contentLength),
   });
 }
+
+type ManifestLoadResult =
+  | { readonly ok: true; readonly manifest: ManifestEntryLookup }
+  | {
+      readonly ok: false;
+      readonly cause:
+        | "manifest_read_error"
+        | "manifest_missing"
+        | "manifest_oversized"
+        | "manifest_body_read_error"
+        | "manifest_invalid"
+        | "manifest_unsafe_content_type";
+    };
 
 async function loadManifest(
   artifacts: ReadOnlyR2Bucket,
   projectId: string,
   artifactHash: string,
-): Promise<ManifestEntryLookup | undefined> {
+): Promise<ManifestLoadResult> {
   let object: Awaited<ReturnType<ReadOnlyR2Bucket["get"]>>;
   try {
     object = await artifacts.get(artifactManifestKey(projectId, artifactHash));
   } catch {
-    return undefined;
+    return { ok: false, cause: "manifest_read_error" };
   }
 
   if (object === null) {
-    return undefined;
+    return { ok: false, cause: "manifest_missing" };
   }
   if (object.size > MAX_CANONICAL_MANIFEST_BYTES) {
-    return undefined;
+    return { ok: false, cause: "manifest_oversized" };
   }
 
   let bytes: ArrayBuffer;
   try {
     bytes = await object.arrayBuffer();
   } catch {
-    return undefined;
+    return { ok: false, cause: "manifest_body_read_error" };
   }
 
-  const decoded = decodeManifest(new Uint8Array(bytes));
+  let decoded: ReturnType<typeof decodeManifest>;
+  try {
+    decoded = decodeManifest(new Uint8Array(bytes));
+  } catch {
+    return { ok: false, cause: "manifest_invalid" };
+  }
   if (!decoded.ok) {
-    return undefined;
+    return { ok: false, cause: "manifest_invalid" };
   }
 
   // Core validates the manifest field type and canonical bytes. HTTP header
   // safety is an edge concern, so reject control characters before constructing
   // a response header from stored metadata.
   if (decoded.value.entries.some((entry) => /[\u0000-\u001f\u007f]/.test(entry.contentType))) {
-    return undefined;
+    return { ok: false, cause: "manifest_unsafe_content_type" };
   }
 
-  return createManifestLookup(decoded.value);
+  return { ok: true, manifest: createManifestLookup(decoded.value) };
 }
 
 async function cachePut(
@@ -317,6 +398,12 @@ async function serveDecision(
       return platformNotFound();
     }
 
+    if (decision.kind === "rejected") {
+      emitDiagnostic(dependencies, "path_rejected", decision.reason);
+    } else {
+      emitDiagnostic(dependencies, "path_not_found");
+    }
+
     return new Response(PLATFORM_NOT_FOUND_BODY, {
       status: decision.status,
       headers: responseHeaders(decision),
@@ -346,28 +433,38 @@ async function serveDecision(
     try {
       object = await dependencies.artifacts.head(key);
     } catch {
+      emitDiagnostic(dependencies, "content_metadata_read_error");
       return platformNotFound();
     }
 
     if (object === null) {
+      emitDiagnostic(dependencies, "content_missing");
       return platformNotFound();
     }
 
-    return responseForDecision(request, decision, null, resolution.artifactHash);
+    return responseForDecision(request, decision, null, resolution.artifactHash, object.size);
   }
 
   let object: Awaited<ReturnType<ReadOnlyR2Bucket["get"]>>;
   try {
     object = await dependencies.artifacts.get(key);
   } catch {
+    emitDiagnostic(dependencies, "content_read_error");
     return platformNotFound();
   }
 
   if (object === null || object.body === undefined) {
+    emitDiagnostic(dependencies, "content_missing");
     return platformNotFound();
   }
 
-  const response = responseForDecision(request, decision, object.body, resolution.artifactHash);
+  const response = responseForDecision(
+    request,
+    decision,
+    object.body,
+    resolution.artifactHash,
+    object.size,
+  );
   if (cache !== undefined && cacheKey !== undefined) {
     try {
       await cachePut(cache, cacheKey, response, ctx);
@@ -396,27 +493,34 @@ async function handlePublicRequest(
   try {
     resolution = await dependencies.resolver.resolvePublication(projectLabel);
   } catch {
+    emitDiagnostic(dependencies, "publication_resolver_error");
     return platformNotFound();
   }
 
   // Null covers unknown, unpublished, and suspended hosts. Do not touch either
   // cache or R2 before this authorization result is known.
-  if (resolution === null || !isPublicationResolution(resolution)) {
+  if (resolution === null) {
+    return platformNotFound();
+  }
+  if (!isPublicationResolution(resolution)) {
+    emitDiagnostic(dependencies, "publication_resolution_invalid");
     return platformNotFound();
   }
 
   // Gate authorization is a separate future seam. Never expose a gated
   // publication while this secrets-free responder has no gate verifier.
   if (resolution.servingFlags.gated) {
+    emitDiagnostic(dependencies, "gate_verification_unavailable");
     return platformNotFound();
   }
 
-  const manifest = await loadManifest(
+  const manifestResult = await loadManifest(
     dependencies.artifacts,
     resolution.projectId,
     resolution.artifactHash,
   );
-  if (manifest === undefined) {
+  if (!manifestResult.ok) {
+    emitDiagnostic(dependencies, manifestResult.cause);
     return platformNotFound();
   }
 
@@ -424,10 +528,10 @@ async function handlePublicRequest(
     const decision = resolveServing(
       {
         method: request.method,
-        rawPath: `${url.pathname}${url.search}`,
+        rawPath: rawPathForRequest(request, url),
         isHtmlNavigation: isHtmlNavigation(request),
       },
-      manifest,
+      manifestResult.manifest,
       // These contract fields are reserved for later gate/SPA work. The public
       // responder keeps both features hard-off until their dedicated seams land.
       { spaFallback: false, gated: false },
@@ -436,6 +540,7 @@ async function handlePublicRequest(
     return await serveDecision(request, dependencies, decision, resolution, ctx);
   } catch {
     // A malformed stored MIME/path value must not turn into an edge exception.
+    emitDiagnostic(dependencies, "serving_resolution_error");
     return platformNotFound();
   }
 }

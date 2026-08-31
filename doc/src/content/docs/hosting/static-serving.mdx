@@ -74,7 +74,8 @@ or other assets.
 The uploader and server enforce the same conservative path boundary:
 
 - Percent encoding is parsed once. Malformed encoding, NUL, backslash, encoded
-  separators, and `.` or `..` path segments are rejected.
+  separators, and `.` or `..` path segments are rejected with the same generic,
+  `no-store` 404 response as an ordinary missing path.
 - Lookup preserves and compares path bytes case-sensitively. A publication is
   rejected if it contains portable case or normalization collisions, such as
   `Logo.png` and `logo.png`, so behavior cannot depend on the Mac filesystem.
@@ -89,3 +90,7 @@ DNS labels are separately canonical lowercase and case-insensitive; that does
 not weaken case-sensitive artifact lookup.
 The publishing client applies these path exclusions before promotion as part
 of the [Sync protocol](/docs/sync/).
+
+For a served object, `Content-Length` comes from R2 object metadata so response
+framing stays consistent with the streamed bytes even if stored object length
+and manifest size diverge.

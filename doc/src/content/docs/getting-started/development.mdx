@@ -1,0 +1,126 @@
+---
+title: Local development
+description: Install the repository, run both Workers locally, and choose the right test lane.
+sidebar_position: 3
+---
+
+This page covers the local control and public Workers. It does not provision
+Cloudflare resources or deploy a Worker. For an operator deployment, see the
+[deployment runbook](../hosting/deployment/).
+
+## Install the toolchain
+
+Use Node.js 22.12 or newer and the pinned pnpm version declared by the root
+`package.json`:
+
+```sh
+pnpm install --frozen-lockfile
+```
+
+The install runs the repository preparation hooks. Keep generated and local
+state out of commits.
+
+## Prepare local D1 and environment values
+
+The top-level Wrangler configuration points the control Worker at a local D1
+database and local R2 fixture. Apply all pending control migrations before
+starting a fresh local session:
+
+```sh
+pnpm --dir workers/control db:migrate:local
+```
+
+For browser and account work, create `workers/control/.dev.vars` from the
+example and set a local-only auth secret and the invited email allowlist. Do
+not reuse production credentials:
+
+```sh
+cp workers/control/.dev.vars.example workers/control/.dev.vars
+```
+
+At minimum, set `BETTER_AUTH_SECRET` to a random local value and set
+`SIGNUP_ALLOWED_EMAILS` to the disposable email addresses that may sign up.
+`BETTER_AUTH_BASE_URL` and `BETTER_AUTH_TRUSTED_ORIGINS` must match the local
+URL you use. The example also names the R2 signer variables; they are only
+needed when deliberately exercising a signer against a disposable remote
+bucket. Local workerd tests use injected credentials and local bindings, so do
+not put a production R2 token in `.dev.vars`.
+
+`workers/public/.dev.vars.example` is optional because the top-level
+`PUBLIC_BASE_DOMAIN=public.test` is already suitable for local work:
+
+```sh
+cp workers/public/.dev.vars.example workers/public/.dev.vars
+```
+
+`.dev.vars` is ignored by git and must never be committed. Choose either
+`.dev.vars` or an `.env` file for a Worker; do not keep both as competing
+sources of local values.
+
+## Run both Workers
+
+Open two terminals. Start control first so the public Worker's local
+`CONTROL` service binding has a target. The `--var` overrides below make the
+browser origin agree with Wrangler's default HTTP listener; omit them if your
+`.dev.vars` already contains the same local values.
+
+Terminal 1:
+
+```sh
+pnpm --dir workers/control dev -- --port 8787 --var BETTER_AUTH_BASE_URL:http://localhost:8787 --var BETTER_AUTH_TRUSTED_ORIGINS:http://localhost:8787
+```
+
+Terminal 2:
+
+```sh
+pnpm --dir workers/public dev -- --port 8788
+```
+
+The control Worker is available at `http://localhost:8787`. The public Worker
+listens at `http://localhost:8788` and resolves only one canonical label before
+`PUBLIC_BASE_DOMAIN`; it does not serve arbitrary localhost paths. When a
+local publication exists, a request can provide a matching host explicitly:
+
+```sh
+curl -H 'Host: site--owner.public.test' http://127.0.0.1:8788/
+```
+
+The local public service binding points at the local control Worker. Use the
+Worker integration tests for the complete publication-to-serving path when
+you do not have a local desktop client or a prepared artifact.
+
+## Invited local signup
+
+M1 signup is invite-only. Put a disposable address in
+`SIGNUP_ALLOWED_EMAILS`, restart the control dev process, and use that exact
+address for the email/password signup request. Addresses not in the
+comma-separated allowlist are rejected. The allowlist is a local secret-like
+setting, not a value to commit or copy to production by accident.
+
+## Choose a test lane
+
+The fast lane runs only pure Node tests from `packages/*` and is useful while
+editing core logic. On the reference setup it takes about one second:
+
+```sh
+pnpm exec vitest --project node-unit --run
+```
+
+The full repository test command runs the Node, control-Worker, and
+public-Worker projects and then the manifest-driven preflight test. It takes
+about 115 seconds on the reference setup:
+
+```sh
+pnpm test
+```
+
+When changing a Worker, a focused project run is also useful:
+
+```sh
+pnpm --dir workers/control test
+pnpm --dir workers/public test
+```
+
+The repository's complete eight-step gate is `pnpm verify`; it additionally
+checks formatting, linting, type generation, builds, documentation parity, and
+strict internal links. It does not run the operator-only remote smoke.

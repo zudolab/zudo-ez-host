@@ -1,0 +1,125 @@
+---
+title: ローカル開発
+description: repository を install し、2 つの Worker を local で実行して適切な test lane を選びます。
+sidebar_position: 3
+---
+
+このページでは local の control Worker と public Worker を扱います。Cloudflare
+resource の provisioning や Worker の deployment は行いません。operator の deploy
+については[デプロイ手順](../hosting/deployment/)を参照してください。
+
+## Install the toolchain
+
+Node.js 22.12 以上と、root `package.json` が指定する pinned pnpm version を使用します。
+
+```sh
+pnpm install --frozen-lockfile
+```
+
+install では repository の preparation hook も実行されます。generated state と local
+state を commit に含めないでください。
+
+## Prepare local D1 and environment values
+
+top-level Wrangler configuration は control Worker を local D1 database と local R2
+fixture に接続します。新しい local session を開始する前に、未適用の control migration
+をすべて適用します。
+
+```sh
+pnpm --dir workers/control db:migrate:local
+```
+
+browser と account の作業では、example から `workers/control/.dev.vars` を作成し、
+local-only auth secret と invited email allowlist を設定します。production credential
+を再利用しないでください。
+
+```sh
+cp workers/control/.dev.vars.example workers/control/.dev.vars
+```
+
+最低限、`BETTER_AUTH_SECRET` を local 用の random value にし、signup を許可する
+disposable email address を `SIGNUP_ALLOWED_EMAILS` に設定します。
+`BETTER_AUTH_BASE_URL` と `BETTER_AUTH_TRUSTED_ORIGINS` は使用する local URL と一致
+させます。example には R2 signer variable もありますが、これは disposable な remote
+bucket に対して signer を意図的に試す場合だけ必要です。local workerd test は injected
+credential と local binding を使うため、production R2 token を `.dev.vars` に入れない
+でください。
+
+`workers/public/.dev.vars.example` は top-level の `PUBLIC_BASE_DOMAIN=public.test` が
+すでに local work に適しているため optional です。
+
+```sh
+cp workers/public/.dev.vars.example workers/public/.dev.vars
+```
+
+`.dev.vars` は git で ignore され、決して commit してはいけません。Worker ごとに
+`.dev.vars` または `.env` のどちらか一方を選び、local value の source を競合させない
+でください。
+
+## Run both Workers
+
+2 つの terminal を開きます。public Worker の local `CONTROL` service binding に target
+が存在するよう、control を先に起動します。以下の `--var` override は Wrangler default
+の HTTP listener と browser origin を一致させます。`.dev.vars` に同じ local value が
+ある場合は省略できます。
+
+Terminal 1:
+
+```sh
+pnpm --dir workers/control dev -- --port 8787 --var BETTER_AUTH_BASE_URL:http://localhost:8787 --var BETTER_AUTH_TRUSTED_ORIGINS:http://localhost:8787
+```
+
+Terminal 2:
+
+```sh
+pnpm --dir workers/public dev -- --port 8788
+```
+
+control Worker は `http://localhost:8787`、public Worker は `http://localhost:8788` で
+listen します。public Worker は `PUBLIC_BASE_DOMAIN` の前に canonical label が 1 つ
+だけある request だけを resolve し、任意の localhost path を配信するわけではありません。
+local publication が存在する場合は、matching host を明示して request できます。
+
+```sh
+curl -H 'Host: site--owner.public.test' http://127.0.0.1:8788/
+```
+
+local public service binding は local control Worker を target にします。local desktop
+client や prepared artifact がない場合は、publication から serving までの完全な path
+には Worker integration test を使用してください。
+
+## Invited local signup
+
+M1 signup は invite-only です。disposable address を `SIGNUP_ALLOWED_EMAILS` に置いて
+control dev process を再起動し、その正確な address で email/password signup request を
+行います。comma-separated allowlist にない address は拒否されます。allowlist は local
+secret-like setting であり、commit したり、誤って production にコピーしたりする value
+ではありません。
+
+## Choose a test lane
+
+fast lane は `packages/*` の pure Node test だけを実行し、core logic の編集中に便利です。
+reference setup では約 1 秒です。
+
+```sh
+pnpm exec vitest --project node-unit --run
+```
+
+full repository test command は Node、control-Worker、public-Worker の各 project を実行
+し、その後 manifest-driven preflight test も実行します。reference setup では約 115 秒
+です。
+
+```sh
+pnpm test
+```
+
+Worker を変更した場合は、focused project run も便利です。
+
+```sh
+pnpm --dir workers/control test
+pnpm --dir workers/public test
+```
+
+repository の complete eight-step gate は `pnpm verify` です。formatting、linting、
+type generation、build、documentation parity、strict internal link も追加で確認します。
+operator-only remote smoke は実行しません。

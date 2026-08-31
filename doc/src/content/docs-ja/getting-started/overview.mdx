@@ -1,8 +1,26 @@
 ---
-title: はじめに
-description: zudo-ez-host ドキュメントの概要です。
-sidebar_position: 2
+title: ドキュメント概要
+description: zudo-ez-host の product、developer、operator 向けドキュメントの読み方を案内します。
+sidebar_position: 1
 ---
 
-プロダクトとアーキテクチャの詳しいガイドは、次のドキュメント作成段階で追加します。
-現在は、このサイトでプロジェクトの発展中の仕様をまとめています。
+このドキュメントでは、product contract と Worker の development / operation に使う
+手順を分けています。自分の role に合う path から読み始めてください。
+
+## Choose a path
+
+- [core concept] で project、machine、public URL、milestone の境界を理解します
+  （[core concepts](../concepts/)）。
+- [はじめに](./) で Dropbox 風の product model と、local sync root と hosted site の
+  関係を確認します。
+- [ローカル開発](./development/) で dependency の install、2 つの Worker の起動、local
+  migration、test lane の選択を行います。
+- Cloudflare resource を provisioning する authenticated operator だけが
+  [デプロイ手順](../hosting/deployment/)を使用します。
+
+## Read the contracts
+
+[ホスティングアーキテクチャ](../hosting/) は trust boundary を、[sync 仕様](../sync/)
+は manifest、immutable upload、atomic publication を説明します。[webapp 仕様](../webapp/)
+は、deferred feature が提供済みだと誤解させずに account、project、machine の surface を
+説明します。

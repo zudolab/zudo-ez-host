@@ -34,14 +34,61 @@ export async function getMachineByCredentialHash(
   return query.get({ credentialHashSha256 });
 }
 
+/**
+ * The owner-scoped project fields that may cross the control-plane projects
+ * read boundary. Keep this projection explicit: the database row also has an
+ * internal user ID which must never be returned by a project visibility API.
+ */
+export interface OwnedProjectProjection {
+  readonly id: string;
+  readonly slug: string;
+  readonly displayName: string;
+  readonly description: string | null;
+  readonly status: "active" | "taken_down";
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly hostname: string | null;
+  readonly generation: number | null;
+  readonly machineNameSnapshot: string | null;
+  readonly publishedAt: number | null;
+}
+
 export async function getOwnedProject(
   database: ControlDatabase,
   userId: string,
   projectId: string,
-) {
+): Promise<OwnedProjectProjection | undefined> {
   const query = database
-    .select()
+    .select({
+      id: projects.id,
+      slug: projects.slug,
+      displayName: projects.displayName,
+      description: projects.description,
+      status: projects.status,
+      createdAt: projects.createdAt,
+      updatedAt: projects.updatedAt,
+      hostname: hostnameAllocations.label,
+      generation: projectHeads.generation,
+      machineNameSnapshot: publications.machineNameSnapshot,
+      publishedAt: publications.publishedAt,
+    })
     .from(projects)
+    .leftJoin(
+      hostnameAllocations,
+      and(
+        eq(hostnameAllocations.projectId, projects.id),
+        eq(hostnameAllocations.userId, projects.userId),
+      ),
+    )
+    .leftJoin(projectHeads, eq(projectHeads.projectId, projects.id))
+    .leftJoin(
+      publications,
+      and(
+        eq(publications.id, projectHeads.publicationId),
+        eq(publications.projectId, projects.id),
+        eq(publications.generation, projectHeads.generation),
+      ),
+    )
     .where(
       and(
         eq(projects.id, sql.placeholder("projectId")),

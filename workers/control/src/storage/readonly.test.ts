@@ -20,7 +20,10 @@ describe("read-only R2 facade", () => {
     expect(Object.keys(facade).sort()).toEqual(["get", "head"]);
     expect("put" in facade).toBe(false);
     expect("delete" in facade).toBe(false);
-    await expect((await facade.get(key))?.text()).resolves.toBe("facade-ok");
+    const object = await facade.get(key);
+    expect(object).not.toBeNull();
+    if (object === null) throw new Error("Expected the fixture object");
+    await expect(new TextDecoder().decode(await object.arrayBuffer())).toBe("facade-ok");
     await expect(facade.head(key)).resolves.toMatchObject({ key, size: 9 });
   });
 });

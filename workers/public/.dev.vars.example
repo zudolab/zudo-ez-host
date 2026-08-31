@@ -1,0 +1,2 @@
+# Copy to .dev.vars if overriding the top-level local/test default.
+PUBLIC_BASE_DOMAIN=public.test

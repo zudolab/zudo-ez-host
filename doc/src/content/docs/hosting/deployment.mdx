@@ -1,0 +1,320 @@
+---
+title: Deployment runbook
+description: Provision Cloudflare resources, deploy both Workers, and prove the staging path safely.
+sidebar_position: 4
+---
+
+This runbook is for an authenticated operator. It describes a deploy path; it
+does not mean that a staging or production deployment already exists. Local
+checks, a dry run, or a skipped smoke are not deployment evidence.
+
+The checked-in Wrangler files are the source of truth for the two named
+environments. Keep the top-level configuration as the local/workerd fixture,
+and make environment edits in `workers/control/wrangler.toml` and
+`workers/public/wrangler.toml`. The environment inventory and cross-Worker
+invariants are recorded in `docs/ops/environments.md`.
+
+:::warning[Protect credentials and live data]
+Use disposable staging identities and a bucket-scoped R2 token. Never put a
+secret in a Wrangler file, shell command, commit, or log. This runbook creates
+real D1, R2, and Worker state when its commands are run.
+:::
+
+## Deployment boundary
+
+There are two deployable Workers:
+
+- **Control** owns authentication, projects, publication state, and the
+  presigned upload signer. It is deployed first.
+- **Public** serves promoted artifacts from the private R2 bucket. Its
+  `CONTROL` service binding calls the already deployed control Worker, so it is
+  deployed second.
+
+The named `staging` and `production` environments redeclare their bindings in
+full. The top-level `PUBLICATION_RESOLVER` self-binding exists only for local
+workerd tests and must never be copied into a deploy environment.
+
+## Authenticate and choose a target
+
+Install the repository toolchain and authenticate Wrangler with the Cloudflare
+account that owns the target resources:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --dir workers/control exec wrangler whoami
+```
+
+Use a separate Cloudflare account or clearly disposable resources for staging.
+The resource names committed in the configuration are:
+
+| Environment  | Control D1                        | Artifact R2 bucket                  |
+| ------------ | --------------------------------- | ----------------------------------- |
+| `staging`    | `zudo-ez-host-control-staging`    | `zudo-ez-host-artifacts-staging`    |
+| `production` | `zudo-ez-host-control-production` | `zudo-ez-host-artifacts-production` |
+
+## Provision D1 and R2
+
+Create each D1 database once. Save the `database_id` returned by Wrangler and
+replace the all-zero `database_id` in the matching `env.staging` or
+`env.production` block in `workers/control/wrangler.toml`. The all-zero value
+is a provisioning marker, not a usable database.
+
+```sh
+pnpm --dir workers/control exec wrangler d1 create zudo-ez-host-control-staging
+pnpm --dir workers/control exec wrangler d1 create zudo-ez-host-control-production
+```
+
+Create the private R2 buckets if they do not already exist:
+
+```sh
+pnpm --dir workers/control exec wrangler r2 bucket create zudo-ez-host-artifacts-staging
+pnpm --dir workers/control exec wrangler r2 bucket create zudo-ez-host-artifacts-production
+```
+
+Keep public bucket access and `r2.dev` disabled. The control and public
+`ARTIFACTS` bindings must point to the same bucket for one environment, while
+staging and production must remain separate.
+
+## Fill the environment descriptors
+
+Replace every applicable `YOUR_*` value before running the preflight. Values in
+`vars` are not encrypted, so they are limited to domains, IDs, and other
+non-secret configuration:
+
+- `R2_ACCOUNT_ID` is the Cloudflare account ID that owns the R2 bucket.
+- `R2_BUCKET_NAME` is the exact artifact bucket name and must match the
+  control Worker's `ARTIFACTS` binding.
+- `CONTROL_BASE_DOMAIN` is the control Worker host without a scheme or path.
+  `BETTER_AUTH_BASE_URL` must be `https://` plus this exact host.
+- `BETTER_AUTH_TRUSTED_ORIGINS` is a comma-separated list of exact origins. It
+  must include the control origin and must not contain a path, wildcard, or
+  public-content origin.
+- `PUBLIC_BASE_DOMAIN` is the host suffix used by the public Worker. It is the
+  account's `<subdomain>.workers.dev` suffix in staging and the separately
+  purchased public-content domain in production.
+- `PUBLIC_CONTENT_DOMAIN` is the suffix used in canonical project URLs. It is
+  the same staging suffix for the single workers.dev smoke identity and the
+  chosen public-content domain in production.
+
+Production needs two registrable domains: the authenticated control domain and
+a separate public-content domain. Create the control custom domain and the
+public wildcard DNS/Worker route in the appropriate zone, verify one-label TLS
+coverage, and replace the production route descriptors before deploying. Do
+not use a conventional production Worker name on `workers.dev` as a tenant
+hostname; public hosts must have the exact `<slug>--<handle>` label required by
+the [hosting security contract](./security/).
+
+Staging uses `workers.dev`. The committed public Worker name `smoke--operator`
+is only a default for the disposable smoke project. Change
+`env.staging.name` in `workers/public/wrangler.toml` to the exact
+`<slug>--<handle>` label used by the smoke before deploying the public Worker.
+
+## Create the R2 API token and set secrets
+
+The control Worker signs direct uploads with S3-compatible R2 credentials. In
+the Cloudflare dashboard, open **R2 → Overview → Manage API Tokens**, create an
+account or user API token with **Object Read & Write**, and apply it to only the
+one environment's artifact bucket. Copy the Access Key ID and Secret Access
+Key when they are shown; the secret is not shown again. The endpoint is
+`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
+
+See the [Cloudflare R2 API token guide](https://developers.cloudflare.com/r2/api/tokens/)
+for the dashboard permission names and bucket-scoping options.
+
+Use one token per environment where possible. On an already deployed control
+Worker, set all four required secrets through interactive Wrangler prompts,
+repeating the commands with `--env production` for production:
+
+```sh
+pnpm --dir workers/control exec wrangler secret put BETTER_AUTH_SECRET --env staging
+pnpm --dir workers/control exec wrangler secret put SIGNUP_ALLOWED_EMAILS --env staging
+pnpm --dir workers/control exec wrangler secret put R2_ACCESS_KEY_ID --env staging
+pnpm --dir workers/control exec wrangler secret put R2_SECRET_ACCESS_KEY --env staging
+```
+
+`BETTER_AUTH_SECRET` must be a high-entropy value. `SIGNUP_ALLOWED_EMAILS` is
+the private comma-separated allowlist for invited M1 accounts. The two R2
+secrets are the token credentials, not the separate Cloudflare API token used
+for operator cleanup. Paste values only into Wrangler's prompt or an approved
+secret manager; do not pass them as command-line arguments.
+
+For a Worker that has never had a deployed version, required secrets cannot be
+inherited by the first deploy. Put the four values in a temporary `.env` or
+JSON file outside the repository with restrictive permissions, and supply that
+file to the first control deploy:
+
+```sh
+pnpm --dir workers/control exec wrangler deploy --config wrangler.toml --env staging --secrets-file /secure/operator/staging-secrets.env
+```
+
+An `.env` secrets file contains these names and the operator-supplied values:
+
+```dotenv
+BETTER_AUTH_SECRET=<high-entropy-auth-secret>
+SIGNUP_ALLOWED_EMAILS=<comma-separated-invited-emails>
+R2_ACCESS_KEY_ID=<bucket-scoped-r2-access-key>
+R2_SECRET_ACCESS_KEY=<bucket-scoped-r2-secret-key>
+```
+
+The file is input only; it is not a repository artifact. Remove it using your
+secret manager's lifecycle after the first deploy, and never print its values.
+Once a Worker has a deployed version, `wrangler secret put` can update one
+secret at a time without putting the value in the command line.
+
+Google OAuth is not an M1 deployment requirement. Do not add Google credentials
+to the environment until a later milestone explicitly enables that provider.
+
+## Apply migrations before deploying
+
+Apply the control D1 migrations after the database exists and before deploying
+the control Worker. The scripts deliberately include both `--remote` and the
+named environment for real targets:
+
+```sh
+# Local development
+pnpm --dir workers/control db:migrate:local
+
+# Staging
+pnpm --dir workers/control db:migrate:staging
+
+# Production
+pnpm --dir workers/control db:migrate:production
+```
+
+Run one target at a time and confirm all migrations complete successfully.
+Never substitute the top-level local database for a staging or production
+database.
+
+## Staging bootstrap and the base-URL second pass
+
+For a first staging deployment on `workers.dev`, the account subdomain is not
+known until Wrangler creates or reports the first Worker URL. Use a temporary,
+reserved `.invalid` origin only for the first **control** deployment. Replace
+the unknown staging domain values in the control and public descriptors with
+these non-empty bootstrap values so the repository preflight can run:
+
+```toml
+BETTER_AUTH_BASE_URL = "https://bootstrap.invalid"
+BETTER_AUTH_TRUSTED_ORIGINS = "https://bootstrap.invalid"
+CONTROL_BASE_DOMAIN = "bootstrap.invalid"
+PUBLIC_BASE_DOMAIN = "bootstrap.invalid"
+PUBLIC_CONTENT_DOMAIN = "bootstrap.invalid"
+```
+
+This value is not a usable endpoint. Do not invite an account or run the smoke
+against it. With the D1 ID, R2 bucket, and the temporary first-deploy secrets
+file ready, validate and deploy only control:
+
+```sh
+node scripts/check-environment-config.mjs
+pnpm preflight:staging
+pnpm --dir workers/control exec wrangler deploy --config wrangler.toml --env staging --secrets-file /secure/operator/staging-secrets.env
+```
+
+Read the URL in Wrangler's output, for example
+`https://zudo-ez-host-control-staging.<account-subdomain>.workers.dev`. Perform
+the required second pass immediately:
+
+1. Set `CONTROL_BASE_DOMAIN` to the complete control Worker host, and set
+   `BETTER_AUTH_BASE_URL` and `BETTER_AUTH_TRUSTED_ORIGINS` to its exact HTTPS
+   origin.
+2. Set `PUBLIC_BASE_DOMAIN` and `PUBLIC_CONTENT_DOMAIN` to the account's
+   `<account-subdomain>.workers.dev` suffix without the project label.
+3. Put that same suffix in the staging public Worker's `PUBLIC_BASE_DOMAIN`.
+4. Set the public Worker name to the disposable smoke project's exact
+   `<slug>--<handle>` label.
+
+The second pass is mandatory. The bootstrap control Worker is not evidence of
+working authentication or serving.
+
+## Deploy control, then public
+
+After the staging second pass, or after production domains and routes have
+been filled, run the invariant check and credential-free dry runs:
+
+```sh
+node scripts/check-environment-config.mjs
+pnpm --dir workers/control exec wrangler deploy --dry-run --env staging
+pnpm --dir workers/public exec wrangler deploy --dry-run --env staging
+```
+
+Use `--env production` for the production dry runs. Then use the repository
+deploy script, which runs the manifest-driven preflight and deploys control
+before public:
+
+```sh
+pnpm deploy:staging
+pnpm deploy:production
+```
+
+Run only the command for the environment being changed. The preflight reports
+all unresolved variables and undeclared secrets before starting either Worker;
+Wrangler performs the final remote secret-presence check. The public Worker
+must come second because its `CONTROL` service binding targets the already
+existing control Worker and its `PublicationResolver` entrypoint. This order
+also keeps a fresh account from deadlocking on the control Worker's test-only
+self-binding.
+
+On a fresh production account, create the first control version with the
+temporary secrets file described above, using `--env production` and the
+production config. After that control version exists, run
+`pnpm deploy:production` so the normal preflight and control-before-public
+ordering are applied. An existing environment can use the deploy script
+directly.
+
+## Run the gated remote smoke
+
+The smoke is an operator-only post-deploy proof for **staging**. It creates a
+disposable invited account, claims a handle, registers a project, completes
+desktop authorization, mints a machine credential, prepares a publication,
+performs a real presigned R2 `PUT`, verifies and commits it, and optionally
+fetches the served bytes. It is not part of `pnpm verify` or CI.
+
+Before running it, make sure the disposable email is in staging's
+`SIGNUP_ALLOWED_EMAILS`, and that the handle, slug, and (if used) public Worker
+name are disposable. Set the password and Cloudflare API token through a
+secure process environment, never in shell history or a file. The cleanup
+token needs D1 edit plus R2 object read/write access limited to the staging
+targets. The smoke's required non-secret settings are:
+
+```sh
+EZ_HOST_REMOTE_SMOKE=1
+EZ_HOST_REMOTE_SMOKE_ENVIRONMENT=staging
+EZ_HOST_REMOTE_SMOKE_CONTROL_URL=https://zudo-ez-host-control-staging.<account-subdomain>.workers.dev
+EZ_HOST_REMOTE_SMOKE_EMAIL=remote-smoke@example.test
+EZ_HOST_REMOTE_SMOKE_HANDLE=operator
+EZ_HOST_REMOTE_SMOKE_SLUG=smoke
+EZ_HOST_REMOTE_SMOKE_D1_DATABASE=zudo-ez-host-control-staging
+EZ_HOST_REMOTE_SMOKE_R2_BUCKET=zudo-ez-host-artifacts-staging
+```
+
+Also provide `EZ_HOST_REMOTE_SMOKE_PASSWORD`, `CLOUDFLARE_ACCOUNT_ID`, and
+`CLOUDFLARE_API_TOKEN` in the process environment. Set
+`EZ_HOST_REMOTE_SMOKE_PUBLIC_URL` to the exact
+`https://<slug>--<handle>.<public-base-domain>/` URL when the public Worker is
+reachable there. If it is absent, serving is reported as **SKIPPED**, with a
+prominent notice; it is never a pass. `EZ_HOST_REMOTE_SMOKE=1` is the explicit
+opt-in for real staging mutations.
+
+Run:
+
+```sh
+pnpm smoke:remote
+```
+
+The harness prints a verdict for each step and always attempts direct D1/R2
+cleanup after configuration succeeds, including when a later step fails. It
+does not print passwords, cookies, machine credentials, secret values, signed
+URLs, or raw Wrangler output. Do not run two remote smokes concurrently.
+
+For the full variable list, cleanup deletion order, and failure semantics, see
+`docs/ops/environments.md` and
+`workers/control/src/storage/REMOTE_SMOKE.md`.
+
+## If a check fails
+
+Stop before changing live data when the environment invariant, preflight, dry
+run, migration, or health check fails. Fix the named configuration or secret,
+rerun the failed check, and keep the public Worker undeployed until control is
+ready. A green local test or an unset-smoke `SKIPPED, NOT RUN` message does not
+prove a remote deployment.

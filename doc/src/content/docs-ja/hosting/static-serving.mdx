@@ -74,7 +74,8 @@ fallback が exact-file、directory-index、safety rule を置き換えること
 uploader と server は、同じ保守的な path boundary を強制します。
 
 - percent encoding は 1 回だけ parse します。malformed encoding、NUL、backslash、
-  encoded separator、`.` / `..` path segment は拒否します。
+  encoded separator、`.` / `..` path segment は拒否し、通常の missing path と同じ
+  generic な `no-store` 404 response を返します。
 - path byte は保持し、case-sensitive に比較します。`Logo.png` と `logo.png` のような
   portable case / normalization collision を含む publication は拒否し、動作が Mac
   filesystem に依存しないようにします。
@@ -88,3 +89,7 @@ DNS label は別途 canonical lowercase かつ case-insensitive です。これ�
 の case-sensitive 性を弱めません。
 publishing client は、[sync protocol](/ja/docs/sync/)の一部として、promotion 前に
 これらの path exclusion を適用します。
+
+serve する object の `Content-Length` には R2 object metadata を使用します。これにより、
+stored object length と manifest size が異なる場合でも、response framing と stream する
+byte の整合性を維持します。

@@ -236,7 +236,7 @@
       "manifest": [],
       "expected": {
         "kind": "rejected",
-        "status": 400,
+        "status": 404,
         "reason": "malformed_encoding",
         "headers": { "X-Content-Type-Options": "nosniff" },
         "cachePolicy": "noStore",
@@ -250,7 +250,7 @@
       "manifest": [],
       "expected": {
         "kind": "rejected",
-        "status": 400,
+        "status": 404,
         "reason": "encoded_separator",
         "headers": { "X-Content-Type-Options": "nosniff" },
         "cachePolicy": "noStore",
@@ -264,7 +264,7 @@
       "manifest": [],
       "expected": {
         "kind": "rejected",
-        "status": 400,
+        "status": 404,
         "reason": "encoded_separator",
         "headers": { "X-Content-Type-Options": "nosniff" },
         "cachePolicy": "noStore",
@@ -278,7 +278,7 @@
       "manifest": [],
       "expected": {
         "kind": "rejected",
-        "status": 400,
+        "status": 404,
         "reason": "dot_prefixed_segment",
         "headers": { "X-Content-Type-Options": "nosniff" },
         "cachePolicy": "noStore",
@@ -292,7 +292,7 @@
       "manifest": [],
       "expected": {
         "kind": "rejected",
-        "status": 400,
+        "status": 404,
         "reason": "dot_segment",
         "headers": { "X-Content-Type-Options": "nosniff" },
         "cachePolicy": "noStore",
@@ -306,7 +306,7 @@
       "manifest": [],
       "expected": {
         "kind": "rejected",
-        "status": 400,
+        "status": 404,
         "reason": "nul_byte",
         "headers": { "X-Content-Type-Options": "nosniff" },
         "cachePolicy": "noStore",

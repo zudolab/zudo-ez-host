@@ -9,9 +9,15 @@ This app is under development. NEVER consider backward compatibility until relea
 The bootstrap and specification phase is complete. First-party packages under
 `packages/*` and the identity foundation under `workers/*` are now in scope.
 Invited email/password accounts, canonical handles, named-machine enrollment,
-and machine-scoped publication authorization have landed. Production
-Cloudflare resource provisioning, routes, and secrets remain deferred to the
-Workers epic.
+and machine-scoped publication authorization have landed. A documented,
+operator-invoked deploy path now exists for staging and production, including
+resource provisioning, migrations, configuration preflight,
+control-before-public deployment, and gated remote smoke. Staging is now
+deployed on real Cloudflare D1, R2, and Workers infrastructure; its end-to-end
+smoke passed with a genuine presigned R2 upload, publication commit, served-byte
+assertion, and direct cleanup. Production domains, resources, routes, and
+secrets remain prerequisites. The bilingual documentation site is scaffolded
+under [`doc/`](doc/).
 
 ## Tech stack
 
@@ -22,9 +28,8 @@ Workers epic.
 - Future desktop client: a Tauri v2 Mac app.
 - Documentation is built with `zudo-doc`.
 
-Production Cloudflare resource provisioning, routes, and secrets remain
-deferred to the Workers epic. Keep deploy-specific dependencies in the package
-that owns the deploy unit.
+Cloudflare resource provisioning and deploy execution are operator-invoked.
+Keep deploy-specific dependencies in the package that owns the deploy unit.
 
 ## Commands
 

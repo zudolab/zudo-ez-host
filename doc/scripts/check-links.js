@@ -457,20 +457,98 @@ export async function parseContentDirs(configPath) {
 // Shared link and anchor logic
 // ---------------------------------------------------------------------------
 
-export function extractHtmlLinks(html) {
-  const links = [];
-  const regex = /<a\s[^>]*?href=(?:"([^"]*)"|'([^']*)')[^>]*>/gi;
+const HTML_NAMED_CHARACTER_REFERENCES = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  quot: '"',
+};
+
+function decodeHtmlAttributeValue(value) {
+  return value.replace(
+    /&(?:#([0-9]+)|#x([0-9a-f]+)|(amp|apos|gt|lt|quot));/gi,
+    (_reference, decimal, hexadecimal, named) => {
+      if (named !== undefined) return HTML_NAMED_CHARACTER_REFERENCES[named.toLowerCase()];
+      const codePoint = Number.parseInt(
+        hexadecimal ?? decimal,
+        hexadecimal === undefined ? 10 : 16,
+      );
+      if (codePoint === 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff))
+        return "\uFFFD";
+      return String.fromCodePoint(codePoint);
+    },
+  );
+}
+
+// Attribute-scan grammar shared by the anchor and id scans below. A quoted
+// attribute value may legally contain ">" (title="a > b"), so bounding an
+// attribute scan with [^>] silently drops the whole tag: a lost id is a noisy
+// false STRICT FAIL, while a lost href means the link is never checked at all
+// (#4046). This run crosses ">" only inside quotes, and a decoy `href=`/`id=`
+// written as text inside another attribute's value stays unreachable because a
+// quoted span is consumed whole. Each alternative starts with a distinct
+// character, so the repetition backtracks linearly.
+const HTML_ATTRIBUTE_RUN = /(?:"[^"]*"|'[^']*'|[^>"'])/.source;
+const HTML_ATTRIBUTE_VALUE = /(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`\\]+))/.source;
+
+// Single shared anchor scan. Its one consumer, `classifyHtmlAnchorHrefs`,
+// splits these matches into disjoint buckets, so the grammar and the
+// incremental line counting live here once and every bucket sees a fix to the
+// anchor regex.
+function* iterateHtmlAnchorHrefs(html) {
+  const regex = new RegExp(
+    `<a(?=\\s)${HTML_ATTRIBUTE_RUN}*?\\shref\\s*=\\s*${HTML_ATTRIBUTE_VALUE}${HTML_ATTRIBUTE_RUN}*>`,
+    "gi",
+  );
   let match;
   let lastIndex = 0;
   let line = 1;
   while ((match = regex.exec(html)) !== null) {
-    const href = match[1] ?? match[2];
-    if (/^(?:https?:|mailto:|javascript:|data:|tel:)/i.test(href)) continue;
     for (let i = lastIndex; i < match.index; i += 1) if (html[i] === "\n") line += 1;
     lastIndex = match.index;
+    yield { href: decodeHtmlAttributeValue(match[1] ?? match[2] ?? match[3]), line };
+  }
+}
+
+// One anchor pass, two disjoint buckets: internal links to resolve, and the
+// protocol-relative hrefs that are external for resolution purposes but worth
+// reporting informationally (see #3921/#3930). The dist walk calls this once
+// per page; `extractHtmlLinks` / `extractProtocolRelativeHtmlLinks` below are
+// single-bucket views for callers that want only one of the two.
+export function classifyHtmlAnchorHrefs(html) {
+  const links = [];
+  const protocolRelative = [];
+  for (const { href, line } of iterateHtmlAnchorHrefs(html)) {
+    if (/^\/\//.test(href)) {
+      protocolRelative.push({ href, line });
+      continue;
+    }
+    if (/^(?:https?:|mailto:|javascript:|data:|tel:)/i.test(href)) continue;
     links.push({ href, line });
   }
-  return links;
+  return { links, protocolRelative };
+}
+
+export function extractHtmlLinks(html) {
+  return classifyHtmlAnchorHrefs(html).links;
+}
+
+export function extractProtocolRelativeHtmlLinks(html) {
+  return classifyHtmlAnchorHrefs(html).protocolRelative;
+}
+
+export function extractHtmlIds(html) {
+  const ids = [];
+  const regex = new RegExp(
+    `<[A-Za-z]${HTML_ATTRIBUTE_RUN}*?\\sid\\s*=\\s*${HTML_ATTRIBUTE_VALUE}${HTML_ATTRIBUTE_RUN}*>`,
+    "gi",
+  );
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    ids.push(decodeHtmlAttributeValue(match[1] ?? match[2] ?? match[3]));
+  }
+  return ids;
 }
 
 function safeDecodePath(path) {
@@ -488,18 +566,25 @@ function parseHref(href) {
   const rawPath = queryAt === -1 ? beforeFragment : beforeFragment.slice(0, queryAt);
   const rawFragment = hashAt === -1 ? null : href.slice(hashAt + 1);
   if (rawFragment === null)
-    return { path: safeDecodePath(rawPath), fragment: null, fragmentError: null };
+    return { path: safeDecodePath(rawPath), rawPath, fragment: null, fragmentError: null };
   if (rawFragment === "")
-    return { path: safeDecodePath(rawPath), fragment: "", fragmentError: "empty fragment" };
+    return {
+      path: safeDecodePath(rawPath),
+      rawPath,
+      fragment: "",
+      fragmentError: "empty fragment",
+    };
   try {
     return {
       path: safeDecodePath(rawPath),
+      rawPath,
       fragment: decodeURIComponent(rawFragment),
       fragmentError: null,
     };
   } catch {
     return {
       path: safeDecodePath(rawPath),
+      rawPath,
       fragment: rawFragment,
       fragmentError: "malformed percent-encoding",
     };
@@ -563,13 +648,13 @@ export function extractMdxFragmentLinks(content) {
     let match;
     const markdownLink = /\]\(\s*([^\s)#]*#[^\s)]*)(?:\s+[^)]*)?\)/g;
     while ((match = markdownLink.exec(searchLine)) !== null) {
-      if (!/^(?:https?:|mailto:|javascript:|data:|tel:)/i.test(match[1]))
+      if (!/^(?:https?:|\/\/|mailto:|javascript:|data:|tel:)/i.test(match[1]))
         links.push({ href: match[1], line: i + 1 });
     }
     const jsxHref = /\bhref\s*=\s*(?:"([^"]*#[^"]*)"|'([^']*#[^']*)')/g;
     while ((match = jsxHref.exec(searchLine)) !== null) {
       const href = match[1] ?? match[2];
-      if (!/^(?:https?:|mailto:|javascript:|data:|tel:)/i.test(href))
+      if (!/^(?:https?:|\/\/|mailto:|javascript:|data:|tel:)/i.test(href))
         links.push({ href, line: i + 1 });
     }
   }
@@ -634,7 +719,34 @@ function extractStaticMdxIds(body) {
     visibleLines.push(codeFenceOpener === null ? stripInlineCode(line) : "");
   }
   const elements = visibleLines.join("\n");
-  const regex = /<[A-Za-z][^>]*\bid\s*=\s*(?:"([^"]+)"|'([^']+)')[^>]*>/gs;
+  // Same tokenising run as the built-HTML scans: a ">" inside a quoted MDX/JSX
+  // attribute value (title="a > b") must not truncate the tag and lose the id
+  // (#4048). The rest of this pattern keeps its own semantics — `\bid` also
+  // accepts `data-id`, and only non-empty quoted values count, unlike the
+  // built-HTML id scan.
+  //
+  // Two extra guards, scoped to this MDX scan only (the shared
+  // HTML_ATTRIBUTE_RUN above is untouched — the built-HTML scans still rely on
+  // multi-line quoted attributes):
+  //
+  // - MDX_UNESCAPED_LT_LOOKBEHIND: an escaped `\<` in prose is valid MDX and
+  //   must not start a fake tag. Parity matters, not just "preceded by a
+  //   backslash" — `\\<` is an escaped backslash followed by an active `<`.
+  //   The lookbehind is anchored at the run's start (`(?<!\\)`) so it judges
+  //   the whole contiguous backslash run, not a suffix of it.
+  // - MDX_ID_ATTRIBUTE_RUN: without this, a fake tag opened by an escaped `<`
+  //   can have prose apostrophes read as a `'...'` quoted value that crosses
+  //   a real `>` and swallows a real element's id on a later line (#4218).
+  //   Disallowing a blank line inside a quoted value bounds the damage to a
+  //   single paragraph while still letting a real JSX tag — including a
+  //   quoted value spanning one newline — match.
+  const MDX_UNESCAPED_LT_LOOKBEHIND = /(?<!(?<!\\)(?:\\\\)*\\)/.source;
+  const MDX_ID_ATTRIBUTE_RUN =
+    /(?:"(?:(?!\r?\n[ \t]*\r?\n)[^"])*"|'(?:(?!\r?\n[ \t]*\r?\n)[^'])*'|[^>"'])/.source;
+  const regex = new RegExp(
+    `${MDX_UNESCAPED_LT_LOOKBEHIND}<[A-Za-z]${MDX_ID_ATTRIBUTE_RUN}*?\\bid\\s*=\\s*(?:"([^"]+)"|'([^']+)')${MDX_ID_ATTRIBUTE_RUN}*>`,
+    "gs",
+  );
   let match;
   while ((match = regex.exec(elements)) !== null) ids.add(match[1] ?? match[2]);
   return ids;
@@ -723,39 +835,51 @@ export async function checkMdxAnchors(
   return anchors;
 }
 
+async function resolveBuiltPath(path, distDir, basePath, fileDir) {
+  let absolute = path;
+  if (!path.startsWith("/")) absolute = "/" + join(fileDir ? relative(distDir, fileDir) : "", path);
+  let stripped = absolute;
+  if (basePath !== "/" && stripped.startsWith(basePath))
+    stripped = "/" + stripped.slice(basePath.length);
+  const relPath = stripped.startsWith("/") ? stripped.slice(1) : stripped;
+  if (!relPath) return { type: "root", targetFile: join(distDir, "index.html") };
+  // A terminal slash is an explicit directory request, even when the
+  // directory name contains a dot (for example, /files/demo/x.js/). Check it
+  // before extname() so viewer pages can keep their trailing-slash route and
+  // still receive fragment validation against index.html.
+  if (relPath.endsWith("/")) {
+    const indexFile = join(distDir, relPath, "index.html");
+    return (await fileExists(indexFile))
+      ? { type: "directoryIndex", targetFile: indexFile }
+      : { type: "missing", targetFile: null };
+  }
+  if (extname(relPath)) {
+    const targetFile = join(distDir, relPath);
+    return (await fileExists(targetFile))
+      ? { type: "file", targetFile }
+      : { type: "missing", targetFile: null };
+  }
+  const indexFile = join(distDir, relPath, "index.html");
+  if (await fileExists(indexFile)) return { type: "directoryIndex", targetFile: indexFile };
+  const htmlFile = join(distDir, relPath + ".html");
+  if (await fileExists(htmlFile)) return { type: "file", targetFile: htmlFile };
+  return { type: "missing", targetFile: null };
+}
+
 async function resolveDistTarget(href, distDir, basePath = "/", fileDir = "", sourceFile = null) {
-  const { path: clean, fragment, fragmentError } = parseHref(href);
-  if (!clean)
+  const { path: decodedPath, rawPath, fragment, fragmentError } = parseHref(href);
+  if (!rawPath)
     return {
       type: "root",
       targetFile: sourceFile ?? join(distDir, "index.html"),
       fragment,
       fragmentError,
     };
-  let absolute = clean;
-  if (!clean.startsWith("/"))
-    absolute = "/" + join(fileDir ? relative(distDir, fileDir) : "", clean);
-  let stripped = absolute;
-  if (basePath !== "/" && stripped.startsWith(basePath))
-    stripped = "/" + stripped.slice(basePath.length);
-  const relPath = stripped.startsWith("/") ? stripped.slice(1) : stripped;
-  if (!relPath)
-    return { type: "root", targetFile: join(distDir, "index.html"), fragment, fragmentError };
-  if (extname(relPath)) {
-    const targetFile = join(distDir, relPath);
-    return {
-      type: (await fileExists(targetFile)) ? "file" : "missing",
-      targetFile,
-      fragment,
-      fragmentError,
-    };
+  const pathCandidates = rawPath === decodedPath ? [rawPath] : [rawPath, decodedPath];
+  for (const path of pathCandidates) {
+    const detail = await resolveBuiltPath(path, distDir, basePath, fileDir);
+    if (detail.type !== "missing") return { ...detail, fragment, fragmentError };
   }
-  const indexFile = join(distDir, relPath, "index.html");
-  if (await fileExists(indexFile))
-    return { type: "directoryIndex", targetFile: indexFile, fragment, fragmentError };
-  const htmlFile = join(distDir, relPath + ".html");
-  if (await fileExists(htmlFile))
-    return { type: "file", targetFile: htmlFile, fragment, fragmentError };
   return { type: "missing", targetFile: null, fragment, fragmentError };
 }
 
@@ -767,6 +891,12 @@ export async function resolveLink(href, distDir, basePath = "/", fileDir = "") {
   return (await resolveDistTarget(href, distDir, basePath, fileDir)).type !== "missing";
 }
 
+/**
+ * Scan budget: exactly ONE anchor pass per page, and at most ONE id extraction
+ * per HTML target some fragment actually references. Ids are deliberately not
+ * extracted eagerly — most pages are never the target of a fragment link, and
+ * scanning them costs a full regex pass for a set nothing reads.
+ */
 export async function checkHtmlLinksAndTrailing(
   distDir,
   rootDir,
@@ -777,11 +907,29 @@ export async function checkHtmlLinksAndTrailing(
   const broken = [];
   const anchors = [];
   const trailingSlash = [];
+  const protocolRelative = [];
   const idCache = new Map();
   const cache = new Map();
+  const scanned = { links: 0, ids: 0 };
   for (const file of await collectFiles(distDir, [".html"])) {
     const content = await readFile(file, "utf-8");
-    for (const { href, line } of extractHtmlLinks(content)) {
+    const relFile = relative(rootDir, file);
+    // One anchor pass per page: internal links and the informational
+    // protocol-relative notices are disjoint buckets of the same match set.
+    const { links, protocolRelative: pageProtocolRelative } = classifyHtmlAnchorHrefs(content);
+    scanned.links += links.length;
+
+    // Filtered on the HREF, exactly like every other category below — an
+    // `excludePatterns` entry suppresses `//host/v/1.2/x` because the href
+    // matches, not because the page the href sits on is itself versioned.
+    // Without this the section had no off switch and consumers stopped
+    // reading it.
+    for (const { href, line } of pageProtocolRelative) {
+      if (excludePatterns.some((pattern) => pattern.test(href))) continue;
+      protocolRelative.push({ file: relFile, line, href });
+    }
+
+    for (const { href, line } of links) {
       if (excludePatterns.some((pattern) => pattern.test(href))) continue;
       const cacheKey = href.startsWith("/") ? href : `${file}:${href}`;
       let detail = cache.get(cacheKey);
@@ -789,7 +937,7 @@ export async function checkHtmlLinksAndTrailing(
         detail = await resolveDistTarget(href, distDir, basePath, dirname(file), file);
         cache.set(cacheKey, detail);
       }
-      if (detail.type === "missing") broken.push({ file: relative(rootDir, file), line, href });
+      if (detail.type === "missing") broken.push({ file: relFile, line, href });
       if (detail.fragment !== null) {
         let reason = detail.fragmentError;
         if (
@@ -800,23 +948,20 @@ export async function checkHtmlLinksAndTrailing(
         ) {
           let ids = idCache.get(detail.targetFile);
           if (ids === undefined) {
-            const targetHtml = await readFile(detail.targetFile, "utf-8");
-            ids = new Set();
-            const idRegex = /\bid\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-            let idMatch;
-            while ((idMatch = idRegex.exec(targetHtml)) !== null) ids.add(idMatch[1] ?? idMatch[2]);
+            // The page being walked is already in memory; any other target is
+            // re-read here rather than retained, so the walk never holds more
+            // than one page's HTML no matter how large dist/ is.
+            const targetHtml =
+              detail.targetFile === file ? content : await readFile(detail.targetFile, "utf-8");
+            const targetIds = extractHtmlIds(targetHtml);
+            scanned.ids += targetIds.length;
+            ids = new Set(targetIds);
             idCache.set(detail.targetFile, ids);
           }
           if (!ids.has(detail.fragment)) reason = "missing target id";
         }
         if (reason !== null)
-          anchors.push({
-            file: relative(rootDir, file),
-            line,
-            href,
-            fragment: detail.fragment,
-            reason,
-          });
+          anchors.push({ file: relFile, line, href, fragment: detail.fragment, reason });
       }
       if (checkTrailing) {
         const pathPart = href.split("#")[0].split("?")[0];
@@ -829,12 +974,12 @@ export async function checkHtmlLinksAndTrailing(
           !extname(pathPart) &&
           detail.type === "directoryIndex"
         ) {
-          trailingSlash.push({ file: relative(rootDir, file), line, href });
+          trailingSlash.push({ file: relFile, line, href });
         }
       }
     }
   }
-  return { broken, anchors, trailingSlash };
+  return { broken, anchors, trailingSlash, protocolRelative, scanned };
 }
 
 export async function checkMdxLinks(
@@ -859,11 +1004,26 @@ export async function checkMdxLinks(
   return warnings;
 }
 
+// The authority segment is everything after "//" up to the first "/", "?",
+// or "#". A dotless, colonless authority (no TLD-shaped or host:port-shaped
+// piece) is flagged as a likely internal-path typo — see formatReport below.
+function protocolRelativeAuthority(href) {
+  const rest = href.slice(2);
+  const end = rest.search(/[/?#]/);
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
+function isLikelyInternalPathTypo(href) {
+  const authority = protocolRelativeAuthority(href);
+  return !authority.includes(".") && !authority.includes(":");
+}
+
 export function formatReport(
   brokenLinks,
   mdxWarnings,
   trailingSlashWarnings = [],
   anchorWarnings = [],
+  protocolRelative = [],
 ) {
   const lines = [];
   const section = (title, entries, format) => {
@@ -891,6 +1051,14 @@ export function formatReport(
     "=== Invalid Anchors ===",
     anchorWarnings,
     (e) => `${e.file}:${e.line}  ${e.href}  (fragment: #${e.fragment}; ${e.reason})`,
+  );
+  // Informational only — excluded from `total` / the ✓/✗ line / the
+  // non-strict "Issues found" note below, deliberately (see #3934).
+  section(
+    "=== Protocol-Relative Links (informational) ===",
+    protocolRelative,
+    (e) =>
+      `${e.file}:${e.line}  ${e.href}${isLikelyInternalPathTypo(e.href) ? `  ← authority has no dot or colon; may be an internal-path typo (e.g. ${e.href} → ${e.href.slice(1)})` : ""}`,
   );
   const total =
     brokenLinks.length + mdxWarnings.length + trailingSlashWarnings.length + anchorWarnings.length;
@@ -953,26 +1121,35 @@ async function main() {
     `Source scan: ${contentDirs.map((dir) => relative(rootDir, dir) || ".").join(", ")}${hasDist ? "; dist/ pass enabled" : "; dist/ absent (source-only)"}\n`,
   );
 
-  const [{ broken, anchors: htmlAnchors, trailingSlash }, mdxWarnings, mdxAnchors] =
-    await Promise.all([
-      hasDist
-        ? checkHtmlLinksAndTrailing(
-            distDir,
-            rootDir,
-            config.basePath,
-            excludePatterns,
-            config.trailingSlash,
-          )
-        : Promise.resolve({ broken: [], anchors: [], trailingSlash: [] }),
-      checkMdxLinks(
-        contentDirs,
-        rootDir,
-        hasDist ? distDir : null,
-        config.basePath,
-        config.localeKeys,
-      ),
-      checkMdxAnchors(contentDirs, rootDir, config.basePath, config.localeKeys, excludePatterns),
-    ]);
+  const [
+    { broken, anchors: htmlAnchors, trailingSlash, protocolRelative, scanned },
+    mdxWarnings,
+    mdxAnchors,
+  ] = await Promise.all([
+    hasDist
+      ? checkHtmlLinksAndTrailing(
+          distDir,
+          rootDir,
+          config.basePath,
+          excludePatterns,
+          config.trailingSlash,
+        )
+      : Promise.resolve({
+          broken: [],
+          anchors: [],
+          trailingSlash: [],
+          protocolRelative: [],
+          scanned: { links: 0, ids: 0 },
+        }),
+    checkMdxLinks(
+      contentDirs,
+      rootDir,
+      hasDist ? distDir : null,
+      config.basePath,
+      config.localeKeys,
+    ),
+    checkMdxAnchors(contentDirs, rootDir, config.basePath, config.localeKeys, excludePatterns),
+  ]);
   const anchorWarnings = [...htmlAnchors, ...mdxAnchors];
   const allowlistPath = options.allowlistPath
     ? options.allowlistPath.startsWith("/")
@@ -985,7 +1162,24 @@ async function main() {
   const realAbsolute = filter(mdxWarnings);
   const realAnchors = filter(anchorWarnings);
   const realTrailing = filter(trailingSlash);
-  console.log(formatReport(broken, mdxWarnings, trailingSlash, anchorWarnings));
+  // The one category filtered BEFORE printing. It has no strict gate, so the
+  // allowlist is a consumer's only way to quiet a known-good entry, and
+  // quieting has to reach the section and the count line alike or the section
+  // keeps nagging and stops being read.
+  const shownProtocolRelative = filter(protocolRelative);
+  console.log(
+    formatReport(broken, mdxWarnings, trailingSlash, anchorWarnings, shownProtocolRelative),
+  );
+  if (hasDist)
+    console.log(
+      `\nBuilt HTML scan: ${scanned.links} internal link${scanned.links === 1 ? "" : "s"} and ${scanned.ids} ID attribute${scanned.ids === 1 ? "" : "s"} inspected.`,
+    );
+  if (shownProtocolRelative.length > 0)
+    console.log(
+      `Protocol-relative links: ${shownProtocolRelative.length} found (informational only — see "Protocol-Relative Links" section above; not counted as issues).`,
+    );
+  // Protocol-relative suppressions are deliberately absent from this tally:
+  // the sentence is about strict-mode counts, and that category has none.
   const skipped =
     broken.length -
     realBroken.length +

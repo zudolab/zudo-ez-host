@@ -3,6 +3,15 @@ dist/
 .zfb/
 .zfb-build/
 doc/.zudo-doc/
+
+# Generated during the doc build by @takazudo/zudo-doc's claude-resources plugin.
+# Gitignored (see doc/.gitignore), but Prettier still walks them, so a second
+# `pnpm verify` in an already-built tree fails format:check on build output.
+doc/src/content/docs/claude/
+doc/src/content/docs/claude-md/
+doc/src/content/docs/claude-commands/
+doc/src/content/docs/claude-skills/
+doc/src/content/docs/claude-agents/
 .wrangler/
 worktrees/
 test-results/

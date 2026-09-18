@@ -38,6 +38,10 @@ export default defineConfig(
       scanRoot: "..",
     },
     defaultLocaleOnlyPrefixes: [
+      // zudo-doc >=5.15.0 generates locale-owned Claude resource indexes; the
+      // overview index must be listed here too, or the generator refuses to
+      // overwrite the authored ja stub at src/content/docs-ja/claude/index.mdx.
+      "/docs/claude/",
       "/docs/claude-md/",
       "/docs/claude-skills/",
       "/docs/claude-agents/",

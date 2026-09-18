@@ -24,18 +24,18 @@
     "setup:doc-skill:both": "bash scripts/setup-doc-skill.sh --target both"
   },
   "dependencies": {
-    "@takazudo/zfb": "2.12.0",
-    "@takazudo/zfb-runtime": "2.12.0",
-    "@takazudo/zfb-md-wasm": "2.12.0",
-    "@takazudo/zudo-doc": "^5.13.0",
+    "@takazudo/zfb": "2.18.0",
+    "@takazudo/zfb-runtime": "2.18.0",
+    "@takazudo/zfb-md-wasm": "2.18.0",
+    "@takazudo/zudo-doc": "^5.25.0",
     "zod": "^4.3.6",
     "preact": "^10.29.1",
     "preact-render-to-string": "^6.6.6",
     "katex": "^0.16.38",
     "diff": "^8.0.3",
-    "@takazudo/zdtp": "0.4.12",
+    "@takazudo/zdtp": "0.8.0",
     "minisearch": "^7.2.0",
-    "@takazudo/zudo-doc-history-server": "^5.13.0"
+    "@takazudo/zudo-doc-history-server": "^5.25.0"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

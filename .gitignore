@@ -8,7 +8,6 @@ worktrees/
 test-results/
 playwright-report/
 __inbox/
-_temp-resource/
 .dev.vars
 .env
 .DS_Store

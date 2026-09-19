@@ -17,3 +17,5 @@ worktrees/
 test-results/
 playwright-report/
 pnpm-lock.yaml
+
+_temp-resource/

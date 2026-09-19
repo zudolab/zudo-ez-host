@@ -9,6 +9,7 @@ export default [
       "**/.zfb-build/",
       "**/.zudo-doc/",
       "worktrees/",
+      "_temp-resource/**",
       ".wrangler/",
       "**/.vitest/",
     ],
